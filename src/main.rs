@@ -70,17 +70,17 @@ fn main() {
                     _ => {
                         if let Some(_) = find_excutable(cmd) {
                             let stdout = run_executable(args[0], &args[1..]);
-                            println!("{stdout}");
+                            print!("{stdout}");
                         } else {
                             eprintln!("Command not found");
                         }
                     }
                 }
 
+                buffer.clear();
+
                 print!("$ ");
                 io::stdout().flush().unwrap();
-
-                buffer.clear();
             }
         }
     }
