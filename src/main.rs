@@ -1,5 +1,5 @@
 use std::{
-    env::current_dir,
+    env::{current_dir, set_current_dir},
     fs::metadata,
     io::{self, Write},
     os::unix::fs::PermissionsExt,
@@ -7,7 +7,7 @@ use std::{
     process::{Command, exit},
 };
 
-const BUILTIN: &[&str] = &["exit", "echo", "type", "pwd"];
+const BUILTIN: &[&str] = &["exit", "echo", "type", "pwd", "cd"];
 
 fn run_echo(args: &[&str]) {
     let output = args.join(" ");
@@ -27,6 +27,15 @@ fn run_type(args: &[&str]) {
 fn run_pwd() {
     let path = current_dir().expect("Cannot get current directory.");
     println!("{}", path.display());
+}
+
+fn run_cd(args: &[&str]) {
+    let path = Path::new(args[0]);
+    if path.is_dir() {
+        set_current_dir(path).expect(&format!("{}: No such file or directory", args[0]));
+    } else {
+        eprintln!("{}: No such file or directory", path.display());
+    }
 }
 
 fn find_excutable(name: &str) -> Option<String> {
@@ -83,6 +92,9 @@ fn main() {
                     }
                     "pwd" => {
                         run_pwd();
+                    }
+                    "cd" => {
+                        run_cd(&args[1..]);
                     }
                     _ => {
                         if let Some(_) = find_excutable(cmd) {
