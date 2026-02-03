@@ -1,5 +1,5 @@
 use std::{
-    env::{current_dir, set_current_dir},
+    env::{current_dir, home_dir, set_current_dir},
     fs::metadata,
     io::{self, Write},
     os::unix::fs::PermissionsExt,
@@ -30,11 +30,24 @@ fn run_pwd() {
 }
 
 fn run_cd(args: &[&str]) {
-    let path = Path::new(args[0]);
-    if path.is_dir() {
-        set_current_dir(path).expect(&format!("{}: No such file or directory", args[0]));
+    let path_string = if args.is_empty() {
+        let home = home_dir().expect("Impossible to get home dir");
+        home.display().to_string()
     } else {
-        eprintln!("{}: No such file or directory", path.display());
+        let mut input = args[0].to_string();
+        if input.as_bytes().first() == Some(&b'~') {
+            let home = home_dir().expect("Impossible to get home dir");
+            input = format!("{}{}", home.display(), &input[1..]);
+        }
+        input
+    };
+    let path = Path::new(&path_string);
+    if path.is_dir() {
+        set_current_dir(path).unwrap_or_else(|_| {
+            panic!("{}: No such file or directory", &path_string);
+        })
+    } else {
+        eprintln!("{}: No such file or directory", &path_string);
     }
 }
 
@@ -60,7 +73,7 @@ fn run_executable(path: &str, args: &[&str]) -> String {
         .output()
         .expect("Failed to execute command");
     let stdout = str::from_utf8(&output.stdout).expect("Invalid UTF-8");
-    return stdout.to_string();
+    stdout.to_string()
 }
 
 fn main() {
@@ -97,7 +110,7 @@ fn main() {
                         run_cd(&args[1..]);
                     }
                     _ => {
-                        if let Some(_) = find_excutable(cmd) {
+                        if find_excutable(cmd).is_some() {
                             let stdout = run_executable(args[0], &args[1..]);
                             print!("{stdout}");
                         } else {
