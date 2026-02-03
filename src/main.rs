@@ -1,5 +1,7 @@
 use std::{
+    fs::metadata,
     io::{self, Write},
+    os::unix::fs::PermissionsExt,
     path::Path,
     process::exit,
 };
@@ -21,8 +23,11 @@ fn type_cmd(args: &[&str]) {
                 let p = format!("{bin}/{cmd_name}");
                 let path = Path::new(&p);
                 if path.is_file() {
-                    println!("{cmd_name} is {bin}/{cmd_name}");
-                    return;
+                    let mode = metadata(path).unwrap().permissions().mode();
+                    if mode & 0o100 != 0 || mode & 0o010 != 0 || mode & 0o001 != 0 {
+                        println!("{cmd_name} is {bin}/{cmd_name}");
+                        return;
+                    }
                 }
             }
             println!("{}: not found", args[1]);
