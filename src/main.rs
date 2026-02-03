@@ -3,36 +3,34 @@ use std::{
     io::{self, Write},
     os::unix::fs::PermissionsExt,
     path::Path,
-    process::exit,
+    process::{Command, exit},
 };
 
-fn type_cmd(args: &[&str]) {
-    if args.is_empty() {
-        eprintln!("not found");
-        return;
-    }
-    let cmd_to_check = args[0];
-    match cmd_to_check {
-        "echo" | "exit" | "type" => {
-            println!("{} is a shell builtin", cmd_to_check);
-        }
-        _ => {
-            let path = std::env::var("PATH").expect("cannot get PATH");
-            let bins: Vec<&str> = path.split(':').collect();
-            for bin in bins {
-                let p = format!("{bin}/{cmd_to_check}");
-                let path = Path::new(&p);
-                if path.is_file() {
-                    let mode = metadata(path).unwrap().permissions().mode();
-                    if mode & 0o100 != 0 || mode & 0o010 != 0 || mode & 0o001 != 0 {
-                        println!("{cmd_to_check} is {bin}/{cmd_to_check}");
-                        return;
-                    }
-                }
+const BUILTIN: &[&str] = &["exit", "echo", "type"];
+
+fn find_excutable(name: &str) -> Option<String> {
+    let path = std::env::var("PATH").expect("cannot get PATH");
+    let bins: Vec<&str> = path.split(':').collect();
+    for bin in bins {
+        let p = format!("{bin}/{name}");
+        let path = Path::new(&p);
+        if path.is_file() {
+            let mode = metadata(path).unwrap().permissions().mode();
+            if mode & 0o100 != 0 || mode & 0o010 != 0 || mode & 0o001 != 0 {
+                return Some(format!("{bin}/{name}"));
             }
-            println!("{}: not found", cmd_to_check);
         }
     }
+    None
+}
+
+fn run_executable(path: &str, args: &[&str]) -> String {
+    let output = Command::new(path)
+        .args(args)
+        .output()
+        .expect("Failed to execute command");
+    let stdout = str::from_utf8(&output.stdout).expect("Invalid UTF-8");
+    return stdout.to_string();
 }
 
 fn main() {
@@ -61,10 +59,21 @@ fn main() {
                         println!("{output}");
                     }
                     "type" => {
-                        type_cmd(&args[1..]);
+                        if BUILTIN.contains(&args[1]) {
+                            println!("{} is a shell builtin", args[1]);
+                        } else if let Some(path) = find_excutable(args[1]) {
+                            println!("{} is {path}", args[1])
+                        } else {
+                            println!("{}: not found", args[1]);
+                        }
                     }
                     _ => {
-                        eprintln!("{cmd}: command not found");
+                        if let Some(path) = find_excutable(cmd) {
+                            let stdout = run_executable(&path, &args[1..]);
+                            println!("{stdout}");
+                        } else {
+                            eprintln!("Command not found");
+                        }
                     }
                 }
 
