@@ -34,7 +34,7 @@ fn main() {
                             continue;
                         }
                         match args[1] {
-                            "echo" | "exit" => {
+                            "echo" | "exit" | "type" => {
                                 println!("{} is a shell builtin", args[1]);
                             }
                             _ => {
