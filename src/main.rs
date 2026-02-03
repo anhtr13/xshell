@@ -1,7 +1,34 @@
 use std::{
     io::{self, Write},
+    path::Path,
     process::exit,
 };
+
+fn type_cmd(args: &[&str]) {
+    if args.is_empty() {
+        eprintln!("not found");
+        return;
+    }
+    let cmd_name = args[0];
+    match cmd_name {
+        "echo" | "exit" | "type" => {
+            println!("{} is a shell builtin", args[1]);
+        }
+        _ => {
+            let path = std::env::var("PATH").expect("cannot get PATH");
+            let bins: Vec<&str> = path.split(':').collect();
+            for bin in bins {
+                let p = format!("{bin}/{cmd_name}");
+                let path = Path::new(&p);
+                if path.is_file() {
+                    println!("{cmd_name} is {bin}/{cmd_name}");
+                    return;
+                }
+            }
+            println!("{}: not found", args[1]);
+        }
+    }
+}
 
 fn main() {
     print!("$ ");
@@ -29,18 +56,7 @@ fn main() {
                         println!("{output}");
                     }
                     "type" => {
-                        if args.len() <= 1 {
-                            eprintln!(": not found");
-                            continue;
-                        }
-                        match args[1] {
-                            "echo" | "exit" | "type" => {
-                                println!("{} is a shell builtin", args[1]);
-                            }
-                            _ => {
-                                println!("{}: not found", args[1]);
-                            }
-                        }
+                        type_cmd(&args[1..]);
                     }
                     _ => {
                         eprintln!("{cmd}: command not found");
