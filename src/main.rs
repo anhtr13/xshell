@@ -72,7 +72,7 @@ fn main() {
                             let stdout = run_executable(args[0], &args[1..]);
                             print!("{stdout}");
                         } else {
-                            eprintln!("Command not found");
+                            eprintln!("{}: command not found", cmd);
                         }
                     }
                 }
