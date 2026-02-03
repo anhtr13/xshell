@@ -1,15 +1,30 @@
-use std::io::{self, Write};
+use std::{
+    io::{self, Write},
+    process::exit,
+};
 
 fn main() {
     print!("$ ");
     io::stdout().flush().unwrap();
 
-    let mut cmd = String::new();
-    io::stdin().read_line(&mut cmd).unwrap();
-    let cmd = cmd.trim();
+    let mut buffer = String::new();
 
-    if cmd != "" {
-        eprintln!("{cmd}: command not found");
-        return;
+    loop {
+        match io::stdin().read_line(&mut buffer) {
+            Err(e) => {
+                eprintln!("Error when reading input: {e}");
+                exit(1);
+            }
+            Ok(_) => {
+                let cmd = buffer.trim();
+
+                eprintln!("{cmd}: command not found");
+
+                print!("$ ");
+                io::stdout().flush().unwrap();
+
+                buffer.clear();
+            }
+        }
     }
 }
