@@ -11,26 +11,26 @@ fn type_cmd(args: &[&str]) {
         eprintln!("not found");
         return;
     }
-    let cmd_name = args[0];
-    match cmd_name {
+    let cmd_to_check = args[0];
+    match cmd_to_check {
         "echo" | "exit" | "type" => {
-            println!("{} is a shell builtin", args[1]);
+            println!("{} is a shell builtin", cmd_to_check);
         }
         _ => {
             let path = std::env::var("PATH").expect("cannot get PATH");
             let bins: Vec<&str> = path.split(':').collect();
             for bin in bins {
-                let p = format!("{bin}/{cmd_name}");
+                let p = format!("{bin}/{cmd_to_check}");
                 let path = Path::new(&p);
                 if path.is_file() {
                     let mode = metadata(path).unwrap().permissions().mode();
                     if mode & 0o100 != 0 || mode & 0o010 != 0 || mode & 0o001 != 0 {
-                        println!("{cmd_name} is {bin}/{cmd_name}");
+                        println!("{cmd_to_check} is {bin}/{cmd_to_check}");
                         return;
                     }
                 }
             }
-            println!("{}: not found", args[1]);
+            println!("{}: not found", cmd_to_check);
         }
     }
 }
