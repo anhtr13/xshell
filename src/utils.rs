@@ -6,10 +6,11 @@ use std::{
 };
 
 pub fn parse_input(input: &str) -> Option<(&str, Vec<String>)> {
-    if let Some((cmd, args)) = input.split_once(char::is_whitespace)
-        && let Some(args) = shlex::split(args.trim())
-    {
-        return Some((cmd, args));
+    if let Some((cmd, args)) = input.split_once(char::is_whitespace) {
+        if let Some(args) = shlex::split(args.trim()) {
+            return Some((cmd, args));
+        }
+        return Some((cmd, vec![]));
     }
     None
 }

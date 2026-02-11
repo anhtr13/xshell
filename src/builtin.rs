@@ -27,12 +27,12 @@ impl FromStr for Builtin {
     }
 }
 
-pub fn run_echo(args: &Vec<String>) {
+pub fn run_echo(args: &[String]) {
     let output = args.join(" ");
     println!("{output}");
 }
 
-pub fn run_type(args: &Vec<String>) {
+pub fn run_type(args: &[String]) {
     if Builtin::from_str(&args[0]).is_ok() {
         println!("{} is a shell builtin", args[0]);
     } else if let Some(path) = crate::utils::find_excutable(&args[0]) {
@@ -47,7 +47,7 @@ pub fn run_pwd() {
     println!("{}", path.display());
 }
 
-pub fn run_cd(args: &Vec<String>) {
+pub fn run_cd(args: &[String]) {
     let path_string = if args.is_empty() {
         let home = home_dir().expect("Impossible to get home dir");
         home.display().to_string()

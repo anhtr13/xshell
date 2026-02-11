@@ -39,7 +39,7 @@ fn main() {
                         builtin::run_cd(&args);
                     }
                     _ => {
-                        if utils::find_excutable(&cmd).is_some() {
+                        if utils::find_excutable(cmd).is_some() {
                             let _ = utils::run_executable(cmd, &args);
                         } else {
                             eprintln!("{}: command not found", cmd);
