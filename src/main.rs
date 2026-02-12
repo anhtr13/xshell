@@ -50,7 +50,7 @@ fn main() {
                             } else {
                                 let std_out = output.std_out;
                                 for mut file in cli.stdout_redirects {
-                                    file.write_all(std_out.as_bytes())
+                                    writeln!(&mut file, "{std_out}")
                                         .unwrap_or_else(|e| eprintln!("{e}"));
                                 }
                                 for mut file in cli.stdout_appends {
@@ -66,7 +66,7 @@ fn main() {
                             } else {
                                 let std_err = output.std_err;
                                 for mut file in cli.stderr_redirects {
-                                    file.write_all(std_err.as_bytes())
+                                    writeln!(&mut file, "{std_err}")
                                         .unwrap_or_else(|e| eprintln!("{e}"));
                                 }
                                 for mut file in cli.stderr_appends {
