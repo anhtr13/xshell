@@ -44,7 +44,7 @@ fn main() {
                             }
                         };
 
-                        if output.status == 0 && !output.std_out.is_empty() {
+                        if !output.std_out.is_empty() {
                             if cli.stdout_files.is_empty() {
                                 println!("{}", output.std_out);
                             } else {
@@ -55,7 +55,7 @@ fn main() {
                             }
                         }
 
-                        if output.status > 0 && !output.std_err.is_empty() {
+                        if !output.std_err.is_empty() {
                             if cli.stderr_files.is_empty() {
                                 eprintln!("{}", output.std_err);
                             } else {
