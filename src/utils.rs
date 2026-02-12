@@ -1,9 +1,4 @@
-use std::{
-    fs::metadata,
-    os::unix::fs::PermissionsExt,
-    path::Path,
-    process::{Command, ExitStatus},
-};
+use std::{fs::metadata, os::unix::fs::PermissionsExt, path::Path, process::Command};
 
 pub fn parse_input(input: &str) -> Option<(String, Vec<String>)> {
     if let Some(mut cmd) = shlex::split(input) {
@@ -29,6 +24,16 @@ pub fn find_excutable(name: &str) -> Option<String> {
     None
 }
 
-pub fn run_executable(path: &str, args: &Vec<String>) -> std::io::Result<ExitStatus> {
-    Command::new(path).args(args).status()
+pub fn run_executable(path: &str, args: &Vec<String>) -> Option<String> {
+    match Command::new(path).args(args).output() {
+        Ok(output) => {
+            let data = if output.status.success() {
+                output.stdout
+            } else {
+                output.stderr
+            };
+            Some(String::from_utf8(data).unwrap())
+        }
+        Err(_) => None,
+    }
 }

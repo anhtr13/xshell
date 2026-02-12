@@ -1,5 +1,6 @@
 use std::{
     env::{current_dir, home_dir, set_current_dir},
+    fmt::Display,
     path::Path,
     str::FromStr,
 };
@@ -11,6 +12,18 @@ pub enum Builtin {
     Type,
     Pwd,
     Cd,
+}
+
+impl Display for Builtin {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        match self {
+            Self::Cd => write!(f, "cd"),
+            Self::Echo => write!(f, "exit"),
+            Self::Exit => write!(f, "exit"),
+            Self::Pwd => write!(f, "exit"),
+            Self::Type => write!(f, "exit"),
+        }
+    }
 }
 
 impl FromStr for Builtin {
@@ -27,27 +40,26 @@ impl FromStr for Builtin {
     }
 }
 
-pub fn run_echo(args: &[String]) {
-    let output = args.join(" ");
-    println!("{output}");
+pub fn run_echo(args: &[String]) -> Option<String> {
+    Some(args.join(" "))
 }
 
-pub fn run_type(args: &[String]) {
+pub fn run_type(args: &[String]) -> Option<String> {
     if Builtin::from_str(&args[0]).is_ok() {
-        println!("{} is a shell builtin", args[0]);
+        Some(format!("{} is a shell builtin", args[0]))
     } else if let Some(path) = crate::utils::find_excutable(&args[0]) {
-        println!("{} is {path}", args[0])
+        Some(format!("{} is {path}", args[0]))
     } else {
-        println!("{}: not found", args[0]);
+        Some(format!("{}: not found", args[0]))
     }
 }
 
-pub fn run_pwd() {
+pub fn run_pwd() -> Option<String> {
     let path = current_dir().expect("Cannot get current directory.");
-    println!("{}", path.display());
+    Some(format!("{}", path.display()))
 }
 
-pub fn run_cd(args: &[String]) {
+pub fn run_cd(args: &[String]) -> Option<String> {
     let path_string = if args.is_empty() {
         let home = home_dir().expect("Impossible to get home dir");
         home.display().to_string()
@@ -60,11 +72,8 @@ pub fn run_cd(args: &[String]) {
         input
     };
     let path = Path::new(&path_string);
-    if path.is_dir() {
-        set_current_dir(path).unwrap_or_else(|_| {
-            panic!("{}: No such file or directory", &path_string);
-        })
-    } else {
-        eprintln!("{}: No such file or directory", &path_string);
+    match set_current_dir(path) {
+        Ok(_) => None,
+        Err(_) => Some(format!("{}: No such file or directory", &path_string)),
     }
 }

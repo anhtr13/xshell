@@ -1,7 +1,11 @@
 use std::{
+    fs::File,
     io::{self, Write},
     process::exit,
+    str::FromStr,
 };
+
+use crate::builtin::Builtin;
 
 mod builtin;
 mod utils;
@@ -20,30 +24,41 @@ fn main() {
             }
             Ok(_) => {
                 let input = buffer.trim();
-                let (cmd, args) = utils::parse_input(input).unwrap();
+                let (cmd, mut args) = utils::parse_input(input).unwrap();
+                let mut file = None;
 
-                match cmd.as_str() {
-                    "exit" => {
-                        break;
+                if let Some(r_idx) = args.iter().position(|x| x == ">" || x == "1>")
+                    && r_idx + 1 < args.len()
+                    && let Ok(f) = File::create(&args[r_idx + 1])
+                {
+                    args = args[..r_idx].to_vec();
+                    file = Some(f);
+                }
+
+                let output = if let Ok(cmd) = Builtin::from_str(&cmd) {
+                    match cmd {
+                        Builtin::Cd => builtin::run_cd(&args),
+                        Builtin::Echo => builtin::run_echo(&args),
+                        Builtin::Exit => break,
+                        Builtin::Pwd => builtin::run_pwd(),
+                        Builtin::Type => builtin::run_type(&args),
                     }
-                    "echo" => {
-                        builtin::run_echo(&args);
-                    }
-                    "type" => {
-                        builtin::run_type(&args);
-                    }
-                    "pwd" => {
-                        builtin::run_pwd();
-                    }
-                    "cd" => {
-                        builtin::run_cd(&args);
-                    }
-                    _ => {
-                        if utils::find_excutable(&cmd).is_some() {
-                            let _ = utils::run_executable(&cmd, &args);
-                        } else {
-                            eprintln!("{}: command not found", cmd);
+                } else if utils::find_excutable(&cmd).is_some() {
+                    utils::run_executable(&cmd, &args)
+                } else {
+                    Some(format!("{}: command not found", cmd))
+                };
+
+                if let Some(std_out) = output {
+                    if let Some(mut file) = file {
+                        match file.write_all(std_out.as_bytes()) {
+                            Ok(_) => {}
+                            Err(e) => {
+                                eprintln!("{e}");
+                            }
                         }
+                    } else {
+                        println!("{std_out}");
                     }
                 }
 
