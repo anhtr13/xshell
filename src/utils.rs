@@ -1,5 +1,5 @@
 use std::{
-    fs::{File, metadata},
+    fs::{OpenOptions, metadata},
     io::{self, Error},
     os::unix::fs::PermissionsExt,
     path::Path,
@@ -13,40 +13,60 @@ pub fn parse_input(input: &str) -> io::Result<Cli> {
         let rest = cmd.split_off(1);
         let mut flag = 0;
         let mut args = Vec::new();
-        let mut stdout_files = Vec::new();
-        let mut stderr_files = Vec::new();
+        let mut stdout_redirects = Vec::new();
+        let mut stderr_redirects = Vec::new();
+        let mut stdout_appends = Vec::new();
+        let mut stderr_appends = Vec::new();
         for val in rest {
             if flag == 0 {
                 match val.as_str() {
                     ">" | "1>" => flag = 1,
                     "2>" => flag = 2,
+                    ">>" | "1>>" => flag = 3,
+                    "2>>" => flag = 4,
                     _ => args.push(val),
                 }
             } else if flag == 1 {
                 match val.as_str() {
-                    ">" | "1>" => {
-                        return Err(Error::new(io::ErrorKind::InvalidInput, "parse error"));
-                    }
-                    "2>" => {
+                    ">" | "1>" | "2>" | ">>" | "1>>" | "2>>" => {
                         return Err(Error::new(io::ErrorKind::InvalidInput, "parse error"));
                     }
                     _ => {
-                        let f = File::create(&val)?;
-                        stdout_files.push(f);
+                        let f = OpenOptions::new().create(true).truncate(true).open(&val)?;
+                        stdout_redirects.push(f);
                         flag = 0;
                     }
                 }
             } else if flag == 2 {
                 match val.as_str() {
-                    ">" | "1>" => {
-                        return Err(Error::new(io::ErrorKind::InvalidInput, "parse error"));
-                    }
-                    "2>" => {
+                    ">" | "1>" | "2>" | ">>" | "1>>" | "2>>" => {
                         return Err(Error::new(io::ErrorKind::InvalidInput, "parse error"));
                     }
                     _ => {
-                        let f = File::create(&val)?;
-                        stderr_files.push(f);
+                        let f = OpenOptions::new().create(true).truncate(true).open(&val)?;
+                        stderr_redirects.push(f);
+                        flag = 0;
+                    }
+                }
+            } else if flag == 3 {
+                match val.as_str() {
+                    ">" | "1>" | "2>" | ">>" | "1>>" | "2>>" => {
+                        return Err(Error::new(io::ErrorKind::InvalidInput, "parse error"));
+                    }
+                    _ => {
+                        let f = OpenOptions::new().create(true).append(true).open(&val)?;
+                        stdout_appends.push(f);
+                        flag = 0;
+                    }
+                }
+            } else if flag == 4 {
+                match val.as_str() {
+                    ">" | "1>" | "2>" | ">>" | "1>>" | "2>>" => {
+                        return Err(Error::new(io::ErrorKind::InvalidInput, "parse error"));
+                    }
+                    _ => {
+                        let f = OpenOptions::new().create(true).append(true).open(&val)?;
+                        stderr_appends.push(f);
                         flag = 0;
                     }
                 }
@@ -55,8 +75,10 @@ pub fn parse_input(input: &str) -> io::Result<Cli> {
         return Ok(Cli {
             cmd: cmd.remove(0),
             args,
-            stdout_files,
-            stderr_files,
+            stdout_redirects,
+            stderr_redirects,
+            stdout_appends,
+            stderr_appends,
         });
     }
     Err(Error::new(io::ErrorKind::InvalidInput, "parse error"))

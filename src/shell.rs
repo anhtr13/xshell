@@ -17,8 +17,10 @@ pub struct Output {
 pub struct Cli {
     pub cmd: String,
     pub args: Vec<String>,
-    pub stdout_files: Vec<File>,
-    pub stderr_files: Vec<File>,
+    pub stdout_redirects: Vec<File>,
+    pub stderr_redirects: Vec<File>,
+    pub stdout_appends: Vec<File>,
+    pub stderr_appends: Vec<File>,
 }
 
 #[derive(Debug)]

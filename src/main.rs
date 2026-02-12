@@ -45,23 +45,33 @@ fn main() {
                         };
 
                         if !output.std_out.is_empty() {
-                            if cli.stdout_files.is_empty() {
+                            if cli.stdout_redirects.is_empty() && cli.stdout_appends.is_empty() {
                                 println!("{}", output.std_out);
                             } else {
-                                let std_out = output.std_out.as_bytes();
-                                for mut file in cli.stdout_files {
-                                    file.write_all(std_out).unwrap_or_else(|e| eprintln!("{e}"));
+                                let std_out = output.std_out;
+                                for mut file in cli.stdout_redirects {
+                                    file.write_all(std_out.as_bytes())
+                                        .unwrap_or_else(|e| eprintln!("{e}"));
+                                }
+                                for mut file in cli.stdout_appends {
+                                    writeln!(&mut file, "{std_out}")
+                                        .unwrap_or_else(|e| eprintln!("{e}"));
                                 }
                             }
                         }
 
                         if !output.std_err.is_empty() {
-                            if cli.stderr_files.is_empty() {
+                            if cli.stderr_redirects.is_empty() && cli.stderr_appends.is_empty() {
                                 eprintln!("{}", output.std_err);
                             } else {
-                                let std_err = output.std_err.as_bytes();
-                                for mut file in cli.stderr_files {
-                                    file.write_all(std_err).unwrap_or_else(|e| eprintln!("{e}"));
+                                let std_err = output.std_err;
+                                for mut file in cli.stderr_redirects {
+                                    file.write_all(std_err.as_bytes())
+                                        .unwrap_or_else(|e| eprintln!("{e}"));
+                                }
+                                for mut file in cli.stderr_appends {
+                                    writeln!(&mut file, "{std_err}")
+                                        .unwrap_or_else(|e| eprintln!("{e}"));
                                 }
                             }
                         }
