@@ -81,28 +81,10 @@ pub fn run_pwd() -> CmdOutput {
 }
 
 pub fn run_cd(args: &[String]) -> CmdOutput {
-    if args.is_empty() {
-        match home_dir() {
-            Some(home) => {
-                return CmdOutput {
-                    status: 0,
-                    std_out: home.display().to_string(),
-                    std_err: "".to_string(),
-                };
-            }
-            None => {
-                return CmdOutput {
-                    status: 0,
-                    std_out: "".to_string(),
-                    std_err: "Impossible to get home dir".to_string(),
-                };
-            }
-        }
-    }
-    let mut path_string = args[0].to_string();
-    if path_string.as_bytes().first() == Some(&b'~') {
-        if let Some(home) = home_dir() {
-            path_string = format!("{}{}", home.display(), &path_string[1..]);
+    let mut home = String::new();
+    if args.is_empty() || args[0].as_bytes().first() == Some(&b'~') {
+        if let Some(h) = home_dir() {
+            home = h.display().to_string();
         } else {
             return CmdOutput {
                 status: 1,
@@ -111,6 +93,13 @@ pub fn run_cd(args: &[String]) -> CmdOutput {
             };
         }
     }
+    let path_string = if args.is_empty() {
+        home
+    } else if args[0].as_bytes().first() == Some(&b'~') {
+        format!("{}{}", home, args[0][1..].to_string())
+    } else {
+        args[0].to_string()
+    };
     match set_current_dir(Path::new(&path_string)) {
         Ok(_) => CmdOutput {
             status: 0,
@@ -118,7 +107,7 @@ pub fn run_cd(args: &[String]) -> CmdOutput {
             std_err: "".to_string(),
         },
         Err(e) => CmdOutput {
-            status: 0,
+            status: 1,
             std_out: "".to_string(),
             std_err: e.to_string(),
         },
