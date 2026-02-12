@@ -32,7 +32,11 @@ pub fn parse_input(input: &str) -> io::Result<Cli> {
                         return Err(Error::new(io::ErrorKind::InvalidInput, "parse error"));
                     }
                     _ => {
-                        let f = OpenOptions::new().create(true).truncate(true).open(&val)?;
+                        let f = OpenOptions::new()
+                            .create(true)
+                            .write(true)
+                            .truncate(true)
+                            .open(&val)?;
                         stdout_redirects.push(f);
                         flag = 0;
                     }
@@ -43,7 +47,11 @@ pub fn parse_input(input: &str) -> io::Result<Cli> {
                         return Err(Error::new(io::ErrorKind::InvalidInput, "parse error"));
                     }
                     _ => {
-                        let f = OpenOptions::new().create(true).truncate(true).open(&val)?;
+                        let f = OpenOptions::new()
+                            .create(true)
+                            .write(true)
+                            .truncate(true)
+                            .open(&val)?;
                         stderr_redirects.push(f);
                         flag = 0;
                     }
