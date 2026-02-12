@@ -1,11 +1,25 @@
 use std::{
     env::{current_dir, home_dir, set_current_dir},
     fmt::Display,
+    fs::File,
     path::Path,
     str::FromStr,
 };
 
-use crate::CmdOutput;
+#[derive(Debug)]
+pub struct Output {
+    pub status: u8,
+    pub std_out: String,
+    pub std_err: String,
+}
+
+#[derive(Debug)]
+pub struct Cli {
+    pub cmd: String,
+    pub args: Vec<String>,
+    pub stdout_files: Vec<File>,
+    pub stderr_files: Vec<File>,
+}
 
 #[derive(Debug)]
 pub enum Builtin {
@@ -42,15 +56,15 @@ impl FromStr for Builtin {
     }
 }
 
-pub fn run_echo(args: &[String]) -> CmdOutput {
-    CmdOutput {
+pub fn run_echo(args: &[String]) -> Output {
+    Output {
         status: 0,
         std_out: args.join(" "),
         std_err: "".to_string(),
     }
 }
 
-pub fn run_type(args: &[String]) -> CmdOutput {
+pub fn run_type(args: &[String]) -> Output {
     let (status, std_out, std_err) = if Builtin::from_str(&args[0]).is_ok() {
         (0, format!("{} is a shell builtin", args[0]), "".to_string())
     } else if let Some(path) = crate::utils::find_excutable(&args[0]) {
@@ -58,21 +72,21 @@ pub fn run_type(args: &[String]) -> CmdOutput {
     } else {
         (1, "".to_string(), format!("{}: not found", args[0]))
     };
-    CmdOutput {
+    Output {
         status,
         std_out,
         std_err,
     }
 }
 
-pub fn run_pwd() -> CmdOutput {
+pub fn run_pwd() -> Output {
     match current_dir() {
-        Ok(path) => CmdOutput {
+        Ok(path) => Output {
             status: 0,
             std_out: path.display().to_string(),
             std_err: "".to_string(),
         },
-        Err(e) => CmdOutput {
+        Err(e) => Output {
             status: 1,
             std_out: "".to_string(),
             std_err: e.to_string(),
@@ -80,13 +94,13 @@ pub fn run_pwd() -> CmdOutput {
     }
 }
 
-pub fn run_cd(args: &[String]) -> CmdOutput {
+pub fn run_cd(args: &[String]) -> Output {
     let mut home = String::new();
     if args.is_empty() || args[0].as_bytes().first() == Some(&b'~') {
         if let Some(h) = home_dir() {
             home = h.display().to_string();
         } else {
-            return CmdOutput {
+            return Output {
                 status: 1,
                 std_out: "".to_string(),
                 std_err: "Impossible to get home dir".to_string(),
@@ -101,12 +115,12 @@ pub fn run_cd(args: &[String]) -> CmdOutput {
         args[0].to_string()
     };
     match set_current_dir(Path::new(&path_string)) {
-        Ok(_) => CmdOutput {
+        Ok(_) => Output {
             status: 0,
             std_out: "".to_string(),
             std_err: "".to_string(),
         },
-        Err(_) => CmdOutput {
+        Err(_) => Output {
             status: 1,
             std_out: "".to_string(),
             std_err: format!("cd: {}: No such file or directory", path_string),

@@ -1,13 +1,65 @@
-use std::{fs::metadata, os::unix::fs::PermissionsExt, path::Path, process::Command};
+use std::{
+    fs::{File, metadata},
+    io::{self, Error},
+    os::unix::fs::PermissionsExt,
+    path::Path,
+    process::Command,
+};
 
-use crate::CmdOutput;
+use crate::{Output, shell::Cli};
 
-pub fn parse_input(input: &str) -> Option<(String, Vec<String>)> {
+pub fn parse_input(input: &str) -> io::Result<Cli> {
     if let Some(mut cmd) = shlex::split(input) {
-        let args = cmd.split_off(1);
-        return Some((cmd.remove(0), args));
+        let rest = cmd.split_off(1);
+        let mut flag = 0;
+        let mut args = Vec::new();
+        let mut stdout_files = Vec::new();
+        let mut stderr_files = Vec::new();
+        for val in rest {
+            if flag == 0 {
+                match val.as_str() {
+                    ">" | "1>" => flag = 1,
+                    "2>" => flag = 2,
+                    _ => args.push(val),
+                }
+            } else if flag == 1 {
+                match val.as_str() {
+                    ">" | "1>" => {
+                        return Err(Error::new(io::ErrorKind::InvalidInput, "parse error"));
+                    }
+                    "2>" => {
+                        return Err(Error::new(io::ErrorKind::InvalidInput, "parse error"));
+                    }
+                    _ => {
+                        let f = File::create(&val)?;
+                        stdout_files.push(f);
+                        flag = 0;
+                    }
+                }
+            } else if flag == 2 {
+                match val.as_str() {
+                    ">" | "1>" => {
+                        return Err(Error::new(io::ErrorKind::InvalidInput, "parse error"));
+                    }
+                    "2>" => {
+                        return Err(Error::new(io::ErrorKind::InvalidInput, "parse error"));
+                    }
+                    _ => {
+                        let f = File::create(&val)?;
+                        stderr_files.push(f);
+                        flag = 0;
+                    }
+                }
+            }
+        }
+        return Ok(Cli {
+            cmd: cmd.remove(0),
+            args,
+            stdout_files,
+            stderr_files,
+        });
     }
-    None
+    Err(Error::new(io::ErrorKind::InvalidInput, "parse error"))
 }
 
 pub fn find_excutable(name: &str) -> Option<String> {
@@ -26,7 +78,7 @@ pub fn find_excutable(name: &str) -> Option<String> {
     None
 }
 
-pub fn run_executable(path: &str, args: &Vec<String>) -> CmdOutput {
+pub fn run_executable(path: &str, args: &Vec<String>) -> Output {
     match Command::new(path).args(args).output() {
         Ok(output) => {
             let mut std_err = output.stderr;
@@ -44,13 +96,13 @@ pub fn run_executable(path: &str, args: &Vec<String>) -> CmdOutput {
             }
             let std_out = String::from_utf8(std_out).unwrap();
             let status = if std_err.is_empty() { 0 } else { 1 };
-            CmdOutput {
+            Output {
                 status,
                 std_out,
                 std_err,
             }
         }
-        Err(e) => CmdOutput {
+        Err(e) => Output {
             status: 1,
             std_out: "".to_string(),
             std_err: e.to_string(),

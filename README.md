@@ -1,9 +1,9 @@
 # Xshell
 
-Build a POSIX compliant shell from scratch 
+Build a POSIX compliant shell from scratch
 
-**Feature**: 
+**Feature**:
 
-    - Interpreting shell commands
-    - Builtin commands like cd, pwd, echo, type, exit
-    - Running external programs 
+- Interpreting shell commands
+- Builtin commands like cd, pwd, echo, type, exit
+- Running external programs
