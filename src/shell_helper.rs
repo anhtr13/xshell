@@ -28,7 +28,7 @@ impl Completer for ShellHelper {
                 _ => {}
             }
         }
-        Ok((0, vec![String::from("")]))
+        Ok((0, vec![String::from(line)]))
     }
     // fn update(
     //     &self,

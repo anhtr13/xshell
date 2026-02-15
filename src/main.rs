@@ -8,7 +8,7 @@ use std::{
     str::FromStr,
 };
 
-use rustyline::{Editor, Result, history::DefaultHistory};
+use rustyline::{Config, Editor, Result, history::DefaultHistory};
 
 use crate::{
     shell::{Builtin, Output},
@@ -19,8 +19,11 @@ fn main() -> Result<()> {
     print!("$ ");
     io::stdout().flush().unwrap();
 
-    let mut rl = Editor::<ShellHelper, DefaultHistory>::new()?;
+    let config = Config::builder()
+        .bell_style(rustyline::config::BellStyle::Audible)
+        .build();
     let helper = ShellHelper::default();
+    let mut rl = Editor::<ShellHelper, DefaultHistory>::with_config(config)?;
     rl.set_helper(Some(helper));
 
     loop {
