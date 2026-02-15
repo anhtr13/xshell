@@ -23,8 +23,8 @@ impl Completer for ShellHelper {
 
         if pos == line.len() {
             match prefix {
-                "ech" => return Ok((0, vec![String::from("echo")])),
-                "exi" => return Ok((0, vec![String::from("exit")])),
+                "ech" => return Ok((0, vec![String::from("echo ")])),
+                "exi" => return Ok((0, vec![String::from("exit ")])),
                 _ => {}
             }
         }
