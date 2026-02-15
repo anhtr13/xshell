@@ -8,7 +8,7 @@ use std::{
 
 #[derive(Debug)]
 pub struct Output {
-    pub status: u8,
+    pub _status: u8,
     pub std_out: String,
     pub std_err: String,
 }
@@ -60,7 +60,7 @@ impl FromStr for Builtin {
 
 pub fn run_echo(args: &[String]) -> Output {
     Output {
-        status: 0,
+        _status: 0,
         std_out: args.join(" "),
         std_err: "".to_string(),
     }
@@ -75,7 +75,7 @@ pub fn run_type(args: &[String]) -> Output {
         (1, "".to_string(), format!("{}: not found", args[0]))
     };
     Output {
-        status,
+        _status: status,
         std_out,
         std_err,
     }
@@ -84,12 +84,12 @@ pub fn run_type(args: &[String]) -> Output {
 pub fn run_pwd() -> Output {
     match current_dir() {
         Ok(path) => Output {
-            status: 0,
+            _status: 0,
             std_out: path.display().to_string(),
             std_err: "".to_string(),
         },
         Err(e) => Output {
-            status: 1,
+            _status: 1,
             std_out: "".to_string(),
             std_err: e.to_string(),
         },
@@ -103,7 +103,7 @@ pub fn run_cd(args: &[String]) -> Output {
             home = h.display().to_string();
         } else {
             return Output {
-                status: 1,
+                _status: 1,
                 std_out: "".to_string(),
                 std_err: "Impossible to get home dir".to_string(),
             };
@@ -118,12 +118,12 @@ pub fn run_cd(args: &[String]) -> Output {
     };
     match set_current_dir(Path::new(&path_string)) {
         Ok(_) => Output {
-            status: 0,
+            _status: 0,
             std_out: "".to_string(),
             std_err: "".to_string(),
         },
         Err(_) => Output {
-            status: 1,
+            _status: 1,
             std_out: "".to_string(),
             std_err: format!("cd: {}: No such file or directory", path_string),
         },

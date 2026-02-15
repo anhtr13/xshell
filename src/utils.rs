@@ -94,14 +94,13 @@ pub fn parse_input(input: &str) -> io::Result<Cli> {
 
 pub fn find_excutable(name: &str) -> Option<String> {
     let path = std::env::var("PATH").expect("cannot get PATH");
-    let bins: Vec<&str> = path.split(':').collect();
-    for bin in bins {
-        let p = format!("{bin}/{name}");
+    for dir in path.split(':') {
+        let p = format!("{dir}/{name}");
         let path = Path::new(&p);
         if path.is_file() {
             let mode = metadata(path).unwrap().permissions().mode();
             if mode & 0o100 != 0 || mode & 0o010 != 0 || mode & 0o001 != 0 {
-                return Some(format!("{bin}/{name}"));
+                return Some(p);
             }
         }
     }
@@ -127,13 +126,13 @@ pub fn run_executable(path: &str, args: &Vec<String>) -> Output {
             let std_out = String::from_utf8(std_out).unwrap();
             let status = if std_err.is_empty() { 0 } else { 1 };
             Output {
-                status,
+                _status: status,
                 std_out,
                 std_err,
             }
         }
         Err(e) => Output {
-            status: 1,
+            _status: 1,
             std_out: "".to_string(),
             std_err: e.to_string(),
         },

@@ -1,4 +1,5 @@
 mod shell;
+mod shell_helper;
 mod utils;
 
 use std::{
@@ -7,23 +8,29 @@ use std::{
     str::FromStr,
 };
 
-use crate::shell::{Builtin, Output};
+use rustyline::{Editor, Result, history::DefaultHistory};
 
-fn main() {
+use crate::{
+    shell::{Builtin, Output},
+    shell_helper::ShellHelper,
+};
+
+fn main() -> Result<()> {
     print!("$ ");
     io::stdout().flush().unwrap();
 
-    let mut buffer = String::new();
+    let mut rl = Editor::<ShellHelper, DefaultHistory>::new()?;
+    let helper = ShellHelper::default();
+    rl.set_helper(Some(helper));
 
     loop {
-        match io::stdin().read_line(&mut buffer) {
+        match rl.readline("$ ") {
             Err(e) => {
                 eprintln!("Error when reading input: {e}");
                 exit(1);
             }
-            Ok(_) => {
-                let input = buffer.trim();
-                match utils::parse_input(input) {
+            Ok(input) => {
+                match utils::parse_input(&input) {
                     Ok(cli) => {
                         let output = if let Ok(cmd) = shell::Builtin::from_str(&cli.cmd) {
                             match cmd {
@@ -38,7 +45,7 @@ fn main() {
                         } else {
                             eprintln!("{}: command not found", cli.cmd);
                             Output {
-                                status: 0,
+                                _status: 0,
                                 std_out: "".to_string(),
                                 std_err: "".to_string(),
                             }
@@ -81,11 +88,10 @@ fn main() {
                     }
                 }
 
-                buffer.clear();
-
                 print!("$ ");
                 io::stdout().flush().unwrap();
             }
         }
     }
+    Ok(())
 }
