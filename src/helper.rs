@@ -1,16 +1,18 @@
+use std::fs::read_dir;
+
 use rustyline::{
     Helper, completion::Completer, highlight::Highlighter, hint::Hinter, validate::Validator,
 };
 
-pub struct ShellHelper;
+pub struct InputHelper;
 
-impl ShellHelper {
+impl InputHelper {
     pub fn default() -> Self {
-        ShellHelper
+        InputHelper
     }
 }
 
-impl Completer for ShellHelper {
+impl Completer for InputHelper {
     type Candidate = String;
 
     fn complete(
@@ -25,7 +27,21 @@ impl Completer for ShellHelper {
             match prefix {
                 "ech" => return Ok((0, vec![String::from("echo ")])),
                 "exi" => return Ok((0, vec![String::from("exit ")])),
-                _ => return Ok((0, vec![format!("{}\x07", line)])),
+                pre => {
+                    if let Some(path) = std::env::var_os("PATH") {
+                        for dir in std::env::split_paths(&path) {
+                            if let Ok(read_dir) = read_dir(&dir) {
+                                for entry in read_dir.filter_map(std::io::Result::ok) {
+                                    if let Some(name) = entry.file_name().to_str()
+                                        && name.starts_with(pre)
+                                    {
+                                        return Ok((0, vec![name.to_string()]));
+                                    }
+                                }
+                            }
+                        }
+                    }
+                }
             }
         }
         Ok((0, vec![String::from(line)]))
@@ -40,15 +56,15 @@ impl Completer for ShellHelper {
     // }
 }
 
-impl Hinter for ShellHelper {
+impl Hinter for InputHelper {
     type Hint = String;
     fn hint(&self, _line: &str, _pos: usize, _ctx: &rustyline::Context<'_>) -> Option<Self::Hint> {
         None
     }
 }
 
-impl Validator for ShellHelper {}
+impl Validator for InputHelper {}
 
-impl Highlighter for ShellHelper {}
+impl Highlighter for InputHelper {}
 
-impl Helper for ShellHelper {}
+impl Helper for InputHelper {}

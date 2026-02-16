@@ -1,29 +1,18 @@
+mod helper;
 mod shell;
-mod shell_helper;
-mod utils;
 
-use std::{
-    io::{self, Write},
-    process::exit,
-    str::FromStr,
-};
+use std::{io::Write, process::exit};
 
 use rustyline::{Config, Editor, Result, history::DefaultHistory};
 
-use crate::{
-    shell::{Builtin, Output},
-    shell_helper::ShellHelper,
-};
+use crate::{helper::InputHelper, shell::Shell};
 
 fn main() -> Result<()> {
-    print!("$ ");
-    io::stdout().flush().unwrap();
-
     let config = Config::builder()
         .bell_style(rustyline::config::BellStyle::Audible)
         .build();
-    let helper = ShellHelper::default();
-    let mut rl = Editor::<ShellHelper, DefaultHistory>::with_config(config)?;
+    let helper = InputHelper::default();
+    let mut rl = Editor::<InputHelper, DefaultHistory>::with_config(config)?;
     rl.set_helper(Some(helper));
 
     loop {
@@ -32,69 +21,46 @@ fn main() -> Result<()> {
                 eprintln!("Error when reading input: {e}");
                 exit(1);
             }
-            Ok(input) => {
-                match utils::parse_input(&input) {
-                    Ok(cli) => {
-                        let output = if let Ok(cmd) = shell::Builtin::from_str(&cli.cmd) {
-                            match cmd {
-                                Builtin::Cd => shell::run_cd(&cli.args),
-                                Builtin::Echo => shell::run_echo(&cli.args),
-                                Builtin::Exit => break,
-                                Builtin::Pwd => shell::run_pwd(),
-                                Builtin::Type => shell::run_type(&cli.args),
-                            }
-                        } else if utils::find_excutable(&cli.cmd).is_some() {
-                            utils::run_executable(&cli.cmd, &cli.args)
+            Ok(input) => match Shell::parse_input(&input) {
+                Ok(shell) => {
+                    let output = shell.run();
+
+                    if !output.std_out.is_empty() {
+                        if shell.stdout_redirects.is_empty() && shell.stdout_appends.is_empty() {
+                            println!("{}", output.std_out);
                         } else {
-                            eprintln!("{}: command not found", cli.cmd);
-                            Output {
-                                _status: 0,
-                                std_out: "".to_string(),
-                                std_err: "".to_string(),
+                            let std_out = output.std_out;
+                            for mut file in shell.stdout_redirects {
+                                writeln!(&mut file, "{std_out}")
+                                    .unwrap_or_else(|e| eprintln!("{e}"));
                             }
-                        };
-
-                        if !output.std_out.is_empty() {
-                            if cli.stdout_redirects.is_empty() && cli.stdout_appends.is_empty() {
-                                println!("{}", output.std_out);
-                            } else {
-                                let std_out = output.std_out;
-                                for mut file in cli.stdout_redirects {
-                                    writeln!(&mut file, "{std_out}")
-                                        .unwrap_or_else(|e| eprintln!("{e}"));
-                                }
-                                for mut file in cli.stdout_appends {
-                                    writeln!(&mut file, "{std_out}")
-                                        .unwrap_or_else(|e| eprintln!("{e}"));
-                                }
-                            }
-                        }
-
-                        if !output.std_err.is_empty() {
-                            if cli.stderr_redirects.is_empty() && cli.stderr_appends.is_empty() {
-                                eprintln!("{}", output.std_err);
-                            } else {
-                                let std_err = output.std_err;
-                                for mut file in cli.stderr_redirects {
-                                    writeln!(&mut file, "{std_err}")
-                                        .unwrap_or_else(|e| eprintln!("{e}"));
-                                }
-                                for mut file in cli.stderr_appends {
-                                    writeln!(&mut file, "{std_err}")
-                                        .unwrap_or_else(|e| eprintln!("{e}"));
-                                }
+                            for mut file in shell.stdout_appends {
+                                writeln!(&mut file, "{std_out}")
+                                    .unwrap_or_else(|e| eprintln!("{e}"));
                             }
                         }
                     }
-                    Err(e) => {
-                        eprintln!("{e}");
+
+                    if !output.std_err.is_empty() {
+                        if shell.stderr_redirects.is_empty() && shell.stderr_appends.is_empty() {
+                            eprintln!("{}", output.std_err);
+                        } else {
+                            let std_err = output.std_err;
+                            for mut file in shell.stderr_redirects {
+                                writeln!(&mut file, "{std_err}")
+                                    .unwrap_or_else(|e| eprintln!("{e}"));
+                            }
+                            for mut file in shell.stderr_appends {
+                                writeln!(&mut file, "{std_err}")
+                                    .unwrap_or_else(|e| eprintln!("{e}"));
+                            }
+                        }
                     }
                 }
-
-                print!("$ ");
-                io::stdout().flush().unwrap();
-            }
+                Err(e) => {
+                    eprintln!("{e}");
+                }
+            },
         }
     }
-    Ok(())
 }
