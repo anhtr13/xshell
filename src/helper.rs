@@ -42,6 +42,7 @@ impl Completer for InputHelper {
                             }
                         }
                     }
+                    return Ok((0, vec![format!("{}\x07", line)]));
                 }
             }
         }
