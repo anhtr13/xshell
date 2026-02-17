@@ -2,12 +2,11 @@ use std::{
     env::{current_dir, home_dir, set_current_dir},
     fmt::Display,
     fs::{File, OpenOptions, metadata},
-    io::{self, Error, Write},
+    io::{self, Error},
     os::unix::fs::PermissionsExt,
     path::Path,
-    process::{self, Command, Output, Stdio},
+    process::{self, Child, ChildStdout, Command, Stdio},
     str::FromStr,
-    thread,
 };
 
 #[derive(Debug)]
@@ -165,21 +164,26 @@ pub struct Cmd {
 }
 
 impl Cmd {
-    pub fn run(&self, stdin: Option<String>) -> io::Result<Output> {
-        let mut child = Command::new(&self.name)
-            .args(&self.args)
-            .stdin(Stdio::piped())
-            .stdout(Stdio::piped())
-            .spawn()?;
+    pub fn run(&self, prev_out: Option<ChildStdout>) -> io::Result<Child> {
+        // let echo_child = Command::new("echo")
+        //     .arg("Oh no, a tpyo!")
+        //     .stdout(Stdio::piped())
+        //     .spawn()
+        //     .expect("Failed to start echo process");
+        //
+        // let echo_out = echo_child.stdout;
 
-        if let Some(stdin) = stdin {
-            let mut stdin_handler = child.stdin.take().unwrap();
-            thread::spawn(move || {
-                stdin_handler.write_all(stdin.as_bytes()).unwrap();
-            });
+        match prev_out {
+            Some(prev_out) => Command::new(&self.name)
+                .args(&self.args)
+                .stdin(Stdio::from(prev_out))
+                .stdout(Stdio::piped())
+                .spawn(),
+            None => Command::new(&self.name)
+                .args(&self.args)
+                .stdout(Stdio::piped())
+                .spawn(),
         }
-
-        child.wait_with_output()
     }
 }
 

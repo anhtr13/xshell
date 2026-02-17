@@ -23,7 +23,7 @@ fn main() -> Result<()> {
         let input = rl.readline("$ ")?;
         match parse_input(&input) {
             Ok(cmds) => {
-                let mut prev_std_out = None;
+                let mut prev_child_stdout = None;
                 let count_cmds = cmds.len();
                 for (idx, cmd) in cmds.into_iter().enumerate() {
                     if let Ok(builtin) = Builtin::from_str(&cmd.name) {
@@ -44,9 +44,6 @@ fn main() -> Result<()> {
                                         .unwrap_or_else(|e| eprintln!("{e}"));
                                 });
                             }
-                            prev_std_out = Some(output.std_out);
-                        } else {
-                            prev_std_out = None;
                         }
                         if !output.std_err.is_empty() {
                             if idx + 1 == count_cmds
@@ -66,48 +63,82 @@ fn main() -> Result<()> {
                             }
                         }
                     } else {
-                        match cmd.run(prev_std_out) {
-                            Ok(output) => {
-                                let stdout = String::from_utf8(output.stdout).unwrap_or_default();
-                                let stderr = String::from_utf8(output.stderr).unwrap_or_default();
-                                if idx + 1 == count_cmds
-                                    && cmd.stdout_overwrite.is_empty()
-                                    && cmd.stdout_appends.is_empty()
-                                {
-                                    print!("{stdout}");
-                                } else {
-                                    cmd.stdout_overwrite.into_iter().for_each(|mut file| {
-                                        writeln!(&mut file, "{}", stdout)
-                                            .unwrap_or_else(|e| eprintln!("{e}"));
-                                    });
-                                    cmd.stdout_appends.into_iter().for_each(|mut file| {
-                                        writeln!(&mut file, "{}", stdout)
-                                            .unwrap_or_else(|e| eprintln!("{e}"));
-                                    });
+                        match cmd.run(prev_child_stdout) {
+                            Ok(child) => {
+                                // let ouput = child.wait_with_output().unwrap();
+                                // let stdout = String::from_utf8(ouput.stdout).unwrap_or_default();
+                                // let stderr = String::from_utf8(ouput.stderr).unwrap_or_default();
+                                // if idx + 1 == count_cmds
+                                //     && cmd.stdout_overwrite.is_empty()
+                                //     && cmd.stdout_appends.is_empty()
+                                // {
+                                //     print!("{stdout}");
+                                // } else {
+                                //     cmd.stdout_overwrite.into_iter().for_each(|mut file| {
+                                //         writeln!(&mut file, "{}", stdout)
+                                //             .unwrap_or_else(|e| eprintln!("{e}"));
+                                //     });
+                                //     cmd.stdout_appends.into_iter().for_each(|mut file| {
+                                //         writeln!(&mut file, "{}", stdout)
+                                //             .unwrap_or_else(|e| eprintln!("{e}"));
+                                //     });
+                                // }
+                                // if idx + 1 == count_cmds
+                                //     && cmd.stderr_overwrite.is_empty()
+                                //     && cmd.stderr_appends.is_empty()
+                                // {
+                                //     print!("{stderr}");
+                                // } else {
+                                //     cmd.stderr_overwrite.into_iter().for_each(|mut file| {
+                                //         writeln!(&mut file, "{}", stderr)
+                                //             .unwrap_or_else(|e| eprintln!("{e}"));
+                                //     });
+                                //     cmd.stderr_appends.into_iter().for_each(|mut file| {
+                                //         writeln!(&mut file, "{}", stderr)
+                                //             .unwrap_or_else(|e| eprintln!("{e}"));
+                                //     });
+                                // }
+
+                                if idx + 1 == count_cmds {
+                                    let output = child.wait_with_output().expect("");
+                                    let stdout =
+                                        String::from_utf8(output.stdout).unwrap_or_default();
+                                    let stderr =
+                                        String::from_utf8(output.stderr).unwrap_or_default();
+                                    if cmd.stdout_overwrite.is_empty()
+                                        && cmd.stdout_appends.is_empty()
+                                    {
+                                        print!("{stdout}");
+                                    } else {
+                                        cmd.stdout_overwrite.into_iter().for_each(|mut file| {
+                                            writeln!(&mut file, "{}", stdout)
+                                                .unwrap_or_else(|e| eprintln!("{e}"));
+                                        });
+                                        cmd.stdout_appends.into_iter().for_each(|mut file| {
+                                            writeln!(&mut file, "{}", stdout)
+                                                .unwrap_or_else(|e| eprintln!("{e}"));
+                                        });
+                                    }
+                                    if cmd.stderr_overwrite.is_empty()
+                                        && cmd.stderr_appends.is_empty()
+                                    {
+                                        print!("{stderr}");
+                                    } else {
+                                        cmd.stderr_overwrite.into_iter().for_each(|mut file| {
+                                            writeln!(&mut file, "{}", stderr)
+                                                .unwrap_or_else(|e| eprintln!("{e}"));
+                                        });
+                                        cmd.stderr_appends.into_iter().for_each(|mut file| {
+                                            writeln!(&mut file, "{}", stderr)
+                                                .unwrap_or_else(|e| eprintln!("{e}"));
+                                        });
+                                    }
+                                    break;
                                 }
-                                if idx + 1 == count_cmds
-                                    && cmd.stderr_overwrite.is_empty()
-                                    && cmd.stderr_appends.is_empty()
-                                {
-                                    print!("{stderr}");
-                                } else {
-                                    cmd.stderr_overwrite.into_iter().for_each(|mut file| {
-                                        writeln!(&mut file, "{}", stderr)
-                                            .unwrap_or_else(|e| eprintln!("{e}"));
-                                    });
-                                    cmd.stderr_appends.into_iter().for_each(|mut file| {
-                                        writeln!(&mut file, "{}", stderr)
-                                            .unwrap_or_else(|e| eprintln!("{e}"));
-                                    });
-                                }
-                                if stdout.is_empty() {
-                                    prev_std_out = None
-                                } else {
-                                    prev_std_out = Some(stdout)
-                                }
+                                prev_child_stdout = child.stdout;
                             }
                             Err(e) => {
-                                prev_std_out = None;
+                                prev_child_stdout = None;
                                 eprintln!("Error: {e}");
                             }
                         }
