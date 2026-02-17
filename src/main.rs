@@ -1,11 +1,14 @@
 mod helper;
 mod shell;
 
-use std::{io::Write, process::exit};
+use std::{io::Write, str::FromStr};
 
 use rustyline::{Config, Editor, Result, history::DefaultHistory};
 
-use crate::{helper::InputHelper, shell::Shell};
+use crate::{
+    helper::InputHelper,
+    shell::{Builtin, parse_input},
+};
 
 fn main() -> Result<()> {
     let config = Config::builder()
@@ -17,51 +20,101 @@ fn main() -> Result<()> {
     rl.set_helper(Some(helper));
 
     loop {
-        match rl.readline("$ ") {
-            Err(e) => {
-                eprintln!("Error when reading input: {e}");
-                exit(1);
+        let input = rl.readline("$ ")?;
+        match parse_input(&input) {
+            Ok(cmds) => {
+                let mut prev_std_out = None;
+                let count_cmds = cmds.len();
+                for (idx, cmd) in cmds.into_iter().enumerate() {
+                    if let Ok(builtin) = Builtin::from_str(&cmd.name) {
+                        let output = builtin.run(&cmd.args);
+                        if !output.std_out.is_empty() {
+                            if idx + 1 == count_cmds
+                                && cmd.stdout_overwrite.is_empty()
+                                && cmd.stdout_appends.is_empty()
+                            {
+                                println!("{}", output.std_out);
+                            } else {
+                                cmd.stdout_overwrite.into_iter().for_each(|mut file| {
+                                    writeln!(&mut file, "{}", output.std_out)
+                                        .unwrap_or_else(|e| eprintln!("{e}"));
+                                });
+                                cmd.stdout_appends.into_iter().for_each(|mut file| {
+                                    writeln!(&mut file, "{}", output.std_out)
+                                        .unwrap_or_else(|e| eprintln!("{e}"));
+                                });
+                            }
+                            prev_std_out = Some(output.std_out);
+                        } else {
+                            prev_std_out = None;
+                        }
+                        if !output.std_err.is_empty() {
+                            if idx + 1 == count_cmds
+                                && cmd.stderr_overwrite.is_empty()
+                                && cmd.stderr_appends.is_empty()
+                            {
+                                println!("{}", output.std_err);
+                            } else {
+                                cmd.stderr_overwrite.into_iter().for_each(|mut file| {
+                                    writeln!(&mut file, "{}", output.std_err)
+                                        .unwrap_or_else(|e| eprintln!("{e}"));
+                                });
+                                cmd.stderr_appends.into_iter().for_each(|mut file| {
+                                    writeln!(&mut file, "{}", output.std_err)
+                                        .unwrap_or_else(|e| eprintln!("{e}"));
+                                });
+                            }
+                        }
+                    } else {
+                        match cmd.run(prev_std_out) {
+                            Ok(output) => {
+                                let stdout = String::from_utf8(output.stdout).unwrap_or_default();
+                                let stderr = String::from_utf8(output.stderr).unwrap_or_default();
+                                if idx + 1 == count_cmds
+                                    && cmd.stdout_overwrite.is_empty()
+                                    && cmd.stdout_appends.is_empty()
+                                {
+                                    print!("{stdout}");
+                                } else {
+                                    cmd.stdout_overwrite.into_iter().for_each(|mut file| {
+                                        writeln!(&mut file, "{}", stdout)
+                                            .unwrap_or_else(|e| eprintln!("{e}"));
+                                    });
+                                    cmd.stdout_appends.into_iter().for_each(|mut file| {
+                                        writeln!(&mut file, "{}", stdout)
+                                            .unwrap_or_else(|e| eprintln!("{e}"));
+                                    });
+                                }
+                                if idx + 1 == count_cmds
+                                    && cmd.stderr_overwrite.is_empty()
+                                    && cmd.stderr_appends.is_empty()
+                                {
+                                    print!("{stderr}");
+                                } else {
+                                    cmd.stderr_overwrite.into_iter().for_each(|mut file| {
+                                        writeln!(&mut file, "{}", stderr)
+                                            .unwrap_or_else(|e| eprintln!("{e}"));
+                                    });
+                                    cmd.stderr_appends.into_iter().for_each(|mut file| {
+                                        writeln!(&mut file, "{}", stderr)
+                                            .unwrap_or_else(|e| eprintln!("{e}"));
+                                    });
+                                }
+                                if stdout.is_empty() {
+                                    prev_std_out = None
+                                } else {
+                                    prev_std_out = Some(stdout)
+                                }
+                            }
+                            Err(e) => {
+                                prev_std_out = None;
+                                eprintln!("Error: {e}");
+                            }
+                        }
+                    }
+                }
             }
-            Ok(input) => match Shell::parse_input(&input) {
-                Ok(shell) => {
-                    let output = shell.run();
-
-                    if !output.std_out.is_empty() {
-                        if shell.stdout_redirects.is_empty() && shell.stdout_appends.is_empty() {
-                            println!("{}", output.std_out);
-                        } else {
-                            let std_out = output.std_out;
-                            for mut file in shell.stdout_redirects {
-                                writeln!(&mut file, "{std_out}")
-                                    .unwrap_or_else(|e| eprintln!("{e}"));
-                            }
-                            for mut file in shell.stdout_appends {
-                                writeln!(&mut file, "{std_out}")
-                                    .unwrap_or_else(|e| eprintln!("{e}"));
-                            }
-                        }
-                    }
-
-                    if !output.std_err.is_empty() {
-                        if shell.stderr_redirects.is_empty() && shell.stderr_appends.is_empty() {
-                            eprintln!("{}", output.std_err);
-                        } else {
-                            let std_err = output.std_err;
-                            for mut file in shell.stderr_redirects {
-                                writeln!(&mut file, "{std_err}")
-                                    .unwrap_or_else(|e| eprintln!("{e}"));
-                            }
-                            for mut file in shell.stderr_appends {
-                                writeln!(&mut file, "{std_err}")
-                                    .unwrap_or_else(|e| eprintln!("{e}"));
-                            }
-                        }
-                    }
-                }
-                Err(e) => {
-                    eprintln!("{e}");
-                }
-            },
+            Err(e) => eprintln!("Error: {e}"),
         }
     }
 }

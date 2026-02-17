@@ -2,15 +2,16 @@ use std::{
     env::{current_dir, home_dir, set_current_dir},
     fmt::Display,
     fs::{File, OpenOptions, metadata},
-    io::{self, Error},
+    io::{self, Error, Write},
     os::unix::fs::PermissionsExt,
     path::Path,
-    process::{self, Command},
+    process::{self, Command, Output, Stdio},
     str::FromStr,
+    thread,
 };
 
 #[derive(Debug)]
-pub struct Output {
+pub struct BuiltinOutput {
     pub _status: u8,
     pub std_out: String,
     pub std_err: String,
@@ -51,38 +52,56 @@ impl FromStr for Builtin {
     }
 }
 
+fn check_excutable(name: &str) -> Result<String, String> {
+    if let Some(path) = std::env::var_os("PATH") {
+        for dir in std::env::split_paths(&path) {
+            let p = format!("{}/{name}", dir.display());
+            let path = Path::new(&p);
+            if path.is_file()
+                && let Ok(metadata) = metadata(path)
+                && let mode = metadata.permissions().mode()
+                && (mode & 0o100 != 0 || mode & 0o010 != 0 || mode & 0o001 != 0)
+            {
+                return Ok(p);
+            }
+        }
+        return Err(format!("{name}: command not found"));
+    };
+    Err("Cannot get PATH".to_string())
+}
+
 impl Builtin {
-    fn run_echo(args: &[String]) -> Output {
-        Output {
+    fn run_echo(args: &[String]) -> BuiltinOutput {
+        BuiltinOutput {
             _status: 0,
             std_out: args.join(" "),
             std_err: "".to_string(),
         }
     }
 
-    fn run_type(args: &[String]) -> Output {
+    fn run_type(args: &[String]) -> BuiltinOutput {
         let (status, std_out, std_err) = if Builtin::from_str(&args[0]).is_ok() {
             (0, format!("{} is a shell builtin", args[0]), "".to_string())
-        } else if let Ok(path) = Shell::check_excutable(&args[0]) {
+        } else if let Ok(path) = check_excutable(&args[0]) {
             (0, format!("{} is {path}", args[0]), "".to_string())
         } else {
             (1, "".to_string(), format!("{}: not found", args[0]))
         };
-        Output {
+        BuiltinOutput {
             _status: status,
             std_out,
             std_err,
         }
     }
 
-    fn run_pwd() -> Output {
+    fn run_pwd() -> BuiltinOutput {
         match current_dir() {
-            Ok(path) => Output {
+            Ok(path) => BuiltinOutput {
                 _status: 0,
                 std_out: path.display().to_string(),
                 std_err: "".to_string(),
             },
-            Err(e) => Output {
+            Err(e) => BuiltinOutput {
                 _status: 1,
                 std_out: "".to_string(),
                 std_err: e.to_string(),
@@ -90,13 +109,13 @@ impl Builtin {
         }
     }
 
-    fn run_cd(args: &[String]) -> Output {
+    fn run_cd(args: &[String]) -> BuiltinOutput {
         let mut home = String::new();
         if args.is_empty() || args[0].as_bytes().first() == Some(&b'~') {
             if let Some(h) = home_dir() {
                 home = h.display().to_string();
             } else {
-                return Output {
+                return BuiltinOutput {
                     _status: 1,
                     std_out: "".to_string(),
                     std_err: "Impossible to get home dir".to_string(),
@@ -111,12 +130,12 @@ impl Builtin {
             args[0].to_string()
         };
         match set_current_dir(Path::new(&path_string)) {
-            Ok(_) => Output {
+            Ok(_) => BuiltinOutput {
                 _status: 0,
                 std_out: "".to_string(),
                 std_err: "".to_string(),
             },
-            Err(_) => Output {
+            Err(_) => BuiltinOutput {
                 _status: 1,
                 std_out: "".to_string(),
                 std_err: format!("cd: {}: No such file or directory", path_string),
@@ -124,7 +143,7 @@ impl Builtin {
         }
     }
 
-    pub fn run(&self, args: &[String]) -> Output {
+    pub fn run(&self, args: &[String]) -> BuiltinOutput {
         match self {
             Builtin::Cd => Builtin::run_cd(args),
             Builtin::Echo => Builtin::run_echo(args),
@@ -136,162 +155,145 @@ impl Builtin {
 }
 
 #[derive(Debug)]
-pub struct Shell {
-    pub cmd: String,
+pub struct Cmd {
+    pub name: String,
     pub args: Vec<String>,
-    pub stdout_redirects: Vec<File>,
-    pub stderr_redirects: Vec<File>,
+    pub stdout_overwrite: Vec<File>,
+    pub stderr_overwrite: Vec<File>,
     pub stdout_appends: Vec<File>,
     pub stderr_appends: Vec<File>,
 }
 
-impl Shell {
-    pub fn parse_input(input: &str) -> io::Result<Self> {
-        if let Some(mut cmd) = shlex::split(input) {
-            let rest = cmd.split_off(1);
-            let mut flag = 0;
-            let mut args = Vec::new();
-            let mut stdout_redirects = Vec::new();
-            let mut stderr_redirects = Vec::new();
-            let mut stdout_appends = Vec::new();
-            let mut stderr_appends = Vec::new();
-            for val in rest {
-                if flag == 0 {
-                    match val.as_str() {
-                        ">" | "1>" => flag = 1,
-                        "2>" => flag = 2,
-                        ">>" | "1>>" => flag = 3,
-                        "2>>" => flag = 4,
-                        _ => args.push(val),
-                    }
-                } else if flag == 1 {
-                    match val.as_str() {
-                        ">" | "1>" | "2>" | ">>" | "1>>" | "2>>" => {
+impl Cmd {
+    pub fn run(&self, stdin: Option<String>) -> io::Result<Output> {
+        let mut child = Command::new(&self.name)
+            .args(&self.args)
+            .stdin(Stdio::piped())
+            .stdout(Stdio::piped())
+            .spawn()?;
+
+        if let Some(stdin) = stdin {
+            let mut stdin_handler = child.stdin.take().unwrap();
+            thread::spawn(move || {
+                stdin_handler.write_all(stdin.as_bytes()).unwrap();
+            });
+        }
+
+        child.wait_with_output()
+    }
+}
+
+pub fn parse_input(input: &str) -> io::Result<Vec<Cmd>> {
+    if let Some(input) = shlex::split(input) {
+        let mut cmds = Vec::new();
+        let mut flag: u8 = 0;
+        let mut cmd_name = "".to_string();
+        let mut cmd_args = Vec::new();
+        let mut stdout_overwrite = Vec::new();
+        let mut stderr_overwrite = Vec::new();
+        let mut stdout_appends = Vec::new();
+        let mut stderr_appends = Vec::new();
+        for arg in input {
+            if flag == 0 {
+                match arg.as_str() {
+                    ">" | "1>" => flag = 1,
+                    "2>" => flag = 2,
+                    ">>" | "1>>" => flag = 3,
+                    "2>>" => flag = 4,
+                    "|" => {
+                        if cmd_name.is_empty() {
                             return Err(Error::new(io::ErrorKind::InvalidInput, "parse error"));
                         }
-                        _ => {
-                            let f = OpenOptions::new()
-                                .create(true)
-                                .write(true)
-                                .truncate(true)
-                                .open(&val)?;
-                            stdout_redirects.push(f);
-                            flag = 0;
-                        }
+                        cmds.push(Cmd {
+                            name: cmd_name,
+                            args: cmd_args,
+                            stdout_overwrite,
+                            stderr_overwrite,
+                            stdout_appends,
+                            stderr_appends,
+                        });
+                        cmd_name = "".to_string();
+                        cmd_args = Vec::new();
+                        stdout_overwrite = Vec::new();
+                        stderr_overwrite = Vec::new();
+                        stdout_appends = Vec::new();
+                        stderr_appends = Vec::new();
                     }
-                } else if flag == 2 {
-                    match val.as_str() {
-                        ">" | "1>" | "2>" | ">>" | "1>>" | "2>>" => {
-                            return Err(Error::new(io::ErrorKind::InvalidInput, "parse error"));
-                        }
-                        _ => {
-                            let f = OpenOptions::new()
-                                .create(true)
-                                .write(true)
-                                .truncate(true)
-                                .open(&val)?;
-                            stderr_redirects.push(f);
-                            flag = 0;
-                        }
-                    }
-                } else if flag == 3 {
-                    match val.as_str() {
-                        ">" | "1>" | "2>" | ">>" | "1>>" | "2>>" => {
-                            return Err(Error::new(io::ErrorKind::InvalidInput, "parse error"));
-                        }
-                        _ => {
-                            let f = OpenOptions::new().create(true).append(true).open(&val)?;
-                            stdout_appends.push(f);
-                            flag = 0;
-                        }
-                    }
-                } else if flag == 4 {
-                    match val.as_str() {
-                        ">" | "1>" | "2>" | ">>" | "1>>" | "2>>" => {
-                            return Err(Error::new(io::ErrorKind::InvalidInput, "parse error"));
-                        }
-                        _ => {
-                            let f = OpenOptions::new().create(true).append(true).open(&val)?;
-                            stderr_appends.push(f);
-                            flag = 0;
+                    _ => {
+                        if cmd_name.is_empty() {
+                            cmd_name = arg;
+                        } else {
+                            cmd_args.push(arg);
                         }
                     }
                 }
+            } else if flag == 1 {
+                match arg.as_str() {
+                    ">" | "1>" | "2>" | ">>" | "1>>" | "2>>" | "|" => {
+                        return Err(Error::new(io::ErrorKind::InvalidInput, "parse error"));
+                    }
+                    _ => {
+                        let f = OpenOptions::new()
+                            .create(true)
+                            .write(true)
+                            .truncate(true)
+                            .open(&arg)?;
+                        stdout_overwrite.push(f);
+                        flag = 0;
+                    }
+                }
+            } else if flag == 2 {
+                match arg.as_str() {
+                    ">" | "1>" | "2>" | ">>" | "1>>" | "2>>" | "|" => {
+                        return Err(Error::new(io::ErrorKind::InvalidInput, "parse error"));
+                    }
+                    _ => {
+                        let f = OpenOptions::new()
+                            .create(true)
+                            .write(true)
+                            .truncate(true)
+                            .open(&arg)?;
+                        stderr_overwrite.push(f);
+                        flag = 0;
+                    }
+                }
+            } else if flag == 3 {
+                match arg.as_str() {
+                    ">" | "1>" | "2>" | ">>" | "1>>" | "2>>" | "|" => {
+                        return Err(Error::new(io::ErrorKind::InvalidInput, "parse error"));
+                    }
+                    _ => {
+                        let f = OpenOptions::new().create(true).append(true).open(&arg)?;
+                        stdout_appends.push(f);
+                        flag = 0;
+                    }
+                }
+            } else if flag == 4 {
+                match arg.as_str() {
+                    ">" | "1>" | "2>" | ">>" | "1>>" | "2>>" | "|" => {
+                        return Err(Error::new(io::ErrorKind::InvalidInput, "parse error"));
+                    }
+                    _ => {
+                        let f = OpenOptions::new().create(true).append(true).open(&arg)?;
+                        stderr_appends.push(f);
+                        flag = 0;
+                    }
+                }
             }
-            return Ok(Shell {
-                cmd: cmd.remove(0),
-                args,
-                stdout_redirects,
-                stderr_redirects,
+        }
+        if cmd_name.is_empty() {
+            return Err(Error::new(io::ErrorKind::InvalidInput, "parse error"));
+        } else {
+            cmds.push(Cmd {
+                name: cmd_name,
+                args: cmd_args,
+                stdout_overwrite,
+                stderr_overwrite,
                 stdout_appends,
                 stderr_appends,
             });
         }
-        Err(Error::new(io::ErrorKind::InvalidInput, "parse error"))
+        return Ok(cmds);
     }
-
-    pub fn check_excutable(name: &str) -> Result<String, String> {
-        if let Some(path) = std::env::var_os("PATH") {
-            for dir in std::env::split_paths(&path) {
-                let p = format!("{}/{name}", dir.display());
-                let path = Path::new(&p);
-                if path.is_file()
-                    && let Ok(metadata) = metadata(path)
-                    && let mode = metadata.permissions().mode()
-                    && (mode & 0o100 != 0 || mode & 0o010 != 0 || mode & 0o001 != 0)
-                {
-                    return Ok(p);
-                }
-            }
-            return Err(format!("{name}: command not found"));
-        };
-        Err("Cannot get PATH".to_string())
-    }
-
-    fn run_executable(&self) -> Output {
-        match Self::check_excutable(&self.cmd) {
-            Ok(_) => match Command::new(&self.cmd).args(&self.args).output() {
-                Ok(output) => {
-                    let mut std_err = output.stderr;
-                    if let Some(c) = std_err.last()
-                        && *c == b'\n'
-                    {
-                        std_err.pop();
-                    }
-                    let std_err = String::from_utf8(std_err).unwrap_or_default();
-                    let mut std_out = output.stdout;
-                    if let Some(c) = std_out.last()
-                        && *c == b'\n'
-                    {
-                        std_out.pop();
-                    }
-                    let std_out = String::from_utf8(std_out).unwrap_or_default();
-                    let status = if std_err.is_empty() { 0 } else { 1 };
-                    Output {
-                        _status: status,
-                        std_out,
-                        std_err,
-                    }
-                }
-                Err(e) => Output {
-                    _status: 1,
-                    std_out: "".to_string(),
-                    std_err: e.to_string(),
-                },
-            },
-            Err(e) => Output {
-                _status: 1,
-                std_out: "".to_string(),
-                std_err: e,
-            },
-        }
-    }
-
-    pub fn run(&self) -> Output {
-        if let Ok(builtin) = Builtin::from_str(&self.cmd) {
-            builtin.run(&self.args)
-        } else {
-            self.run_executable()
-        }
-    }
+    Err(Error::new(io::ErrorKind::InvalidInput, "parse error"))
 }
