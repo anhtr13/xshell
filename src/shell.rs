@@ -164,25 +164,24 @@ pub struct Cmd {
 }
 
 impl Cmd {
-    pub fn run(&self, prev_out: Option<ChildStdout>) -> io::Result<Child> {
-        // let echo_child = Command::new("echo")
-        //     .arg("Oh no, a tpyo!")
-        //     .stdout(Stdio::piped())
-        //     .spawn()
-        //     .expect("Failed to start echo process");
-        //
-        // let echo_out = echo_child.stdout;
-
-        match prev_out {
-            Some(prev_out) => Command::new(&self.name)
+    pub fn run(&self, prev_out: Option<ChildStdout>, is_last: bool) -> io::Result<Child> {
+        if is_last {
+            match prev_out {
+                Some(pipe) => Command::new(&self.name)
+                    .args(&self.args)
+                    .stdin(Stdio::from(pipe))
+                    .stdout(Stdio::inherit())
+                    .spawn(),
+                None => Command::new(&self.name)
+                    .args(&self.args)
+                    .stdout(Stdio::inherit())
+                    .spawn(),
+            }
+        } else {
+            Command::new(&self.name)
                 .args(&self.args)
-                .stdin(Stdio::from(prev_out))
                 .stdout(Stdio::piped())
-                .spawn(),
-            None => Command::new(&self.name)
-                .args(&self.args)
-                .stdout(Stdio::piped())
-                .spawn(),
+                .spawn()
         }
     }
 }
