@@ -162,17 +162,29 @@ pub struct Cmd {
 }
 
 impl Cmd {
-    pub fn run(&self, prev_out: Option<ChildStdout>, is_last: bool) -> io::Result<Child> {
+    pub fn run(mut self, prev_out: Option<ChildStdout>, is_last: bool) -> io::Result<Child> {
         if is_last {
+            let stdout = if self.stdout_files.is_empty() {
+                Stdio::inherit()
+            } else {
+                Stdio::from(self.stdout_files.pop().unwrap())
+            };
+            let stderr = if self.stderr_files.is_empty() {
+                Stdio::inherit()
+            } else {
+                Stdio::from(self.stderr_files.pop().unwrap())
+            };
             match prev_out {
                 Some(pipe) => Command::new(&self.name)
                     .args(&self.args)
                     .stdin(Stdio::from(pipe))
-                    .stdout(Stdio::inherit())
+                    .stdout(stdout)
+                    .stderr(stderr)
                     .spawn(),
                 None => Command::new(&self.name)
                     .args(&self.args)
-                    .stdout(Stdio::inherit())
+                    .stdout(stdout)
+                    .stderr(stderr)
                     .spawn(),
             }
         } else {
