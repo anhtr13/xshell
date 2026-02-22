@@ -1,6 +1,7 @@
 pub mod builtin;
 pub mod command;
 pub mod helper;
+pub mod history;
 
 use std::{
     fs::{OpenOptions, metadata},

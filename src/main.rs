@@ -1,21 +1,16 @@
 mod shell;
 
-use crate::shell::{builtin::Builtin, check_is_excutable, helper::InputHelper, parse_input};
-use rustyline::{Config, Editor, Result, config::Configurer, history::DefaultHistory};
-use std::str::FromStr;
+use crate::shell::{
+    builtin::Builtin, check_is_excutable, helper::InputHelper, history::History, parse_input,
+};
+use rustyline::{
+    Config, Editor, Result,
+    config::Configurer,
+    history::{DefaultHistory, FileHistory},
+};
+use std::{env, str::FromStr};
 
-fn main() -> Result<()> {
-    let config = Config::builder()
-        .bell_style(rustyline::config::BellStyle::Audible)
-        .completion_type(rustyline::CompletionType::List)
-        .build();
-    let helper = InputHelper::default();
-    let mut rl = Editor::<InputHelper, DefaultHistory>::with_config(config)?;
-    rl.set_helper(Some(helper));
-    rl.set_auto_add_history(true);
-
-    let mut history = Vec::<String>::new();
-
+fn run(mut rl: Editor<InputHelper, FileHistory>, mut history: History) -> Result<()> {
     loop {
         let input = rl.readline("$ ")?;
         match parse_input(&input) {
@@ -25,7 +20,7 @@ fn main() -> Result<()> {
 
                 for (idx, cmd) in cmds.into_iter().enumerate() {
                     rl.add_history_entry(&input)?;
-                    history.push(format!("{} {}", cmd.name, cmd.args.join(" ")));
+                    history.add(format!("{} {}", cmd.name, cmd.args.join(" ")));
 
                     let is_last = idx + 1 == total_cmds;
 
@@ -43,4 +38,22 @@ fn main() -> Result<()> {
             Err(e) => eprintln!("Error: {e}"),
         }
     }
+}
+
+fn main() -> Result<()> {
+    let config = Config::builder()
+        .bell_style(rustyline::config::BellStyle::Audible)
+        .completion_type(rustyline::CompletionType::List)
+        .build();
+    let helper = InputHelper::default();
+    let mut rl = Editor::<InputHelper, DefaultHistory>::with_config(config)?;
+    rl.set_helper(Some(helper));
+    rl.set_auto_add_history(true);
+
+    let mut history = History::new();
+    if let Ok(histfile) = env::var("HISTFILE") {
+        history.append_from_file(&histfile)?;
+    };
+
+    run(rl, history)
 }

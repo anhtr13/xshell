@@ -1,20 +1,29 @@
 use std::{
     env::{current_dir, home_dir, set_current_dir},
     fmt::Display,
-    fs::OpenOptions,
-    io::{self, BufRead, BufReader, PipeReader, Write},
+    io::{self, PipeReader, Write},
     path::Path,
     process,
     str::FromStr,
 };
 
-use crate::shell::{check_is_excutable, command::Cmd};
+use crate::shell::{check_is_excutable, command::Cmd, history::History};
 
 #[derive(Debug, Default)]
 pub struct BuiltinOutput {
     pub _status: u8,
     pub std_out: String,
     pub std_err: String,
+}
+
+impl BuiltinOutput {
+    pub fn new(status: u8, std_out: String, std_err: String) -> Self {
+        Self {
+            _status: status,
+            std_out,
+            std_err,
+        }
+    }
 }
 
 #[derive(Debug)]
@@ -57,11 +66,7 @@ impl FromStr for Builtin {
 
 impl Builtin {
     fn run_echo(args: &[String]) -> BuiltinOutput {
-        BuiltinOutput {
-            _status: 0,
-            std_out: args.join(" "),
-            std_err: "".to_string(),
-        }
+        BuiltinOutput::new(0, args.join(" "), "".to_string())
     }
 
     fn run_type(args: &[String]) -> BuiltinOutput {
@@ -72,25 +77,13 @@ impl Builtin {
         } else {
             (1, "".to_string(), format!("{}: not found", args[0]))
         };
-        BuiltinOutput {
-            _status: status,
-            std_out,
-            std_err,
-        }
+        BuiltinOutput::new(status, std_out, std_err)
     }
 
     fn run_pwd() -> BuiltinOutput {
         match current_dir() {
-            Ok(path) => BuiltinOutput {
-                _status: 0,
-                std_out: path.display().to_string(),
-                std_err: "".to_string(),
-            },
-            Err(e) => BuiltinOutput {
-                _status: 1,
-                std_out: "".to_string(),
-                std_err: e.to_string(),
-            },
+            Ok(path) => BuiltinOutput::new(0, path.display().to_string(), "".to_string()),
+            Err(e) => BuiltinOutput::new(1, "".to_string(), e.to_string()),
         }
     }
 
@@ -100,11 +93,11 @@ impl Builtin {
             if let Some(h) = home_dir() {
                 home = h.display().to_string();
             } else {
-                return BuiltinOutput {
-                    _status: 1,
-                    std_out: "".to_string(),
-                    std_err: "Impossible to get home dir".to_string(),
-                };
+                return BuiltinOutput::new(
+                    1,
+                    "".to_string(),
+                    "Impossible to get home dir".to_string(),
+                );
             }
         }
         let path_string = if args.is_empty() {
@@ -116,94 +109,63 @@ impl Builtin {
         };
         match set_current_dir(Path::new(&path_string)) {
             Ok(_) => BuiltinOutput::default(),
-            Err(_) => BuiltinOutput {
-                _status: 1,
-                std_out: "".to_string(),
-                std_err: format!("cd: {}: No such file or directory", path_string),
-            },
+            Err(_) => BuiltinOutput::new(
+                1,
+                "".to_string(),
+                format!("cd: {}: No such file or directory", path_string),
+            ),
         }
     }
 
-    fn run_history(args: &[String], history: &mut Vec<String>) -> BuiltinOutput {
+    fn run_history(args: &[String], history: &mut History) -> BuiltinOutput {
         let mut skip = 0;
         if !args.is_empty() {
             if let Ok(limit) = args[0].parse::<usize>() {
-                skip = history.len() - limit.min(history.len());
+                skip = history.commands.len() - limit.min(history.commands.len());
             } else if args.len() >= 2 {
                 if args[0] == "-r" {
-                    match OpenOptions::new().read(true).open(&args[1]) {
-                        Ok(file) => {
-                            let reader = BufReader::new(file);
-                            reader.lines().map_while(Result::ok).for_each(|line| {
-                                if !line.is_empty() {
-                                    history.push(line);
-                                }
-                            });
+                    match history.append_from_file(&args[1]) {
+                        Ok(_) => {
                             return BuiltinOutput::default();
                         }
                         Err(e) => {
-                            return BuiltinOutput {
-                                _status: 1,
-                                std_out: "".to_string(),
-                                std_err: e.to_string(),
-                            };
+                            return BuiltinOutput::new(1, "".to_string(), e.to_string());
                         }
                     }
                 } else if args[0] == "-w" {
-                    match OpenOptions::new()
-                        .create(true)
-                        .write(true)
-                        .truncate(true)
-                        .open(&args[1])
-                    {
-                        Ok(mut file) => {
-                            history.iter().for_each(|line| {
-                                writeln!(file, "{}", line).expect("Cannot write to file");
-                            });
+                    match history.write_to_file(&args[1]) {
+                        Ok(_) => {
                             return BuiltinOutput::default();
                         }
                         Err(e) => {
-                            return BuiltinOutput {
-                                _status: 1,
-                                std_out: "".to_string(),
-                                std_err: e.to_string(),
-                            };
+                            return BuiltinOutput::new(1, "".to_string(), e.to_string());
                         }
                     }
                 } else if args[0] == "-a" {
-                    match OpenOptions::new().create(true).append(true).open(&args[1]) {
-                        Ok(mut file) => {
-                            let mut idx = 0;
-                            for i in (0..history.len() - 1).rev() {
-                                if history[i].starts_with("history -a") {
-                                    idx = i + 1;
-                                    break;
-                                }
-                            }
-                            history.iter().skip(idx).for_each(|cmd| {
-                                writeln!(file, "{}", cmd).expect("Cannot write to file");
-                            });
+                    match history.append_to_file(&args[1]) {
+                        Ok(_) => {
                             return BuiltinOutput::default();
                         }
                         Err(e) => {
-                            return BuiltinOutput {
-                                _status: 1,
-                                std_out: "".to_string(),
-                                std_err: e.to_string(),
-                            };
+                            return BuiltinOutput::new(1, "".to_string(), e.to_string());
                         }
                     }
                 }
             }
         }
         let mut stdout = String::new();
-        history.iter().enumerate().skip(skip).for_each(|(i, cmd)| {
-            if i + 1 == history.len() {
-                stdout.push_str(&format!("{:>5}  {}", i + 1, cmd));
-            } else {
-                stdout.push_str(&format!("{:>5}  {}\n", i + 1, cmd));
-            }
-        });
+        history
+            .commands
+            .iter()
+            .enumerate()
+            .skip(skip)
+            .for_each(|(i, cmd)| {
+                if i + 1 == history.commands.len() {
+                    stdout.push_str(&format!("{:>5}  {}", i + 1, cmd));
+                } else {
+                    stdout.push_str(&format!("{:>5}  {}\n", i + 1, cmd));
+                }
+            });
         BuiltinOutput {
             _status: 0,
             std_out: stdout,
@@ -211,7 +173,7 @@ impl Builtin {
         }
     }
 
-    pub fn run(&self, cmd: Cmd, history: &mut Vec<String>, is_last: bool) -> Option<PipeReader> {
+    pub fn run(&self, cmd: Cmd, history: &mut History, is_last: bool) -> Option<PipeReader> {
         let output = match self {
             Builtin::Cd => Self::run_cd(&cmd.args),
             Builtin::Echo => Self::run_echo(&cmd.args),
