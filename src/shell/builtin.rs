@@ -127,7 +127,7 @@ impl Builtin {
         }
     }
 
-    fn run_history(history: &[String]) -> BuiltinOutput {
+    fn run_history(history: &mut Vec<String>) -> BuiltinOutput {
         let mut stdout = String::new();
         history.iter().enumerate().for_each(|(i, cmd)| {
             if i + 1 == history.len() {
@@ -144,6 +144,7 @@ impl Builtin {
     }
 
     pub fn run(&self, cmd: Cmd, history: &mut Vec<String>, is_last: bool) -> Option<PipeReader> {
+        history.push("history".to_string());
         let output = match self {
             Builtin::Cd => Self::run_cd(&cmd.args),
             Builtin::Echo => Self::run_echo(&cmd.args),
