@@ -127,20 +127,28 @@ impl Builtin {
         }
     }
 
-    fn run_history() -> BuiltinOutput {
+    fn run_history(history: &[String]) -> BuiltinOutput {
+        let mut stdout = String::new();
+        history.iter().enumerate().for_each(|(i, cmd)| {
+            if i + 1 == history.len() {
+                stdout.push_str(&format!("{:>5}  {}", i + 1, cmd));
+            } else {
+                stdout.push_str(&format!("{:>5}  {}\n", i + 1, cmd));
+            }
+        });
         BuiltinOutput {
             _status: 0,
-            std_out: "".to_string(),
+            std_out: stdout,
             std_err: "".to_string(),
         }
     }
 
-    pub fn run(&self, cmd: Cmd, is_last: bool) -> Option<PipeReader> {
+    pub fn run(&self, cmd: Cmd, history: &mut Vec<String>, is_last: bool) -> Option<PipeReader> {
         let output = match self {
             Builtin::Cd => Self::run_cd(&cmd.args),
             Builtin::Echo => Self::run_echo(&cmd.args),
             Builtin::Exit => process::exit(0),
-            Builtin::History => Self::run_history(),
+            Builtin::History => Self::run_history(history),
             Builtin::Pwd => Self::run_pwd(),
             Builtin::Type => Self::run_type(&cmd.args),
         };
@@ -166,6 +174,9 @@ impl Builtin {
                 println!("{}", output.std_out);
             }
         }
+
+        history.push(format!("{} {}", cmd.name, cmd.args.join(" ")));
+
         pipeout
     }
 }

@@ -31,9 +31,9 @@ pub fn check_is_excutable(name: &str) -> Result<String, String> {
 
 pub fn parse_input(input: &str) -> io::Result<Vec<Cmd>> {
     if let Some(input) = shlex::split(input) {
-        let mut clis = Vec::new();
+        let mut cmds = Vec::new();
         let mut flag: u8 = 0;
-        let mut cmd = "".to_string();
+        let mut name = "".to_string();
         let mut args = Vec::new();
         let mut stdout_file = None;
         let mut stderr_file = None;
@@ -45,23 +45,23 @@ pub fn parse_input(input: &str) -> io::Result<Vec<Cmd>> {
                     ">>" | "1>>" => flag = 3,
                     "2>>" => flag = 4,
                     "|" => {
-                        if cmd.is_empty() {
+                        if name.is_empty() {
                             return Err(Error::new(io::ErrorKind::InvalidInput, "parse error"));
                         }
-                        clis.push(Cmd {
-                            name: cmd,
+                        cmds.push(Cmd {
+                            name,
                             args,
                             stdout_file,
                             stderr_file,
                         });
-                        cmd = "".to_string();
+                        name = "".to_string();
                         args = Vec::new();
                         stdout_file = None;
                         stderr_file = None;
                     }
                     _ => {
-                        if cmd.is_empty() {
-                            cmd = arg;
+                        if name.is_empty() {
+                            name = arg;
                         } else {
                             args.push(arg);
                         }
@@ -121,17 +121,17 @@ pub fn parse_input(input: &str) -> io::Result<Vec<Cmd>> {
                 }
             }
         }
-        if cmd.is_empty() {
+        if name.is_empty() {
             return Err(Error::new(io::ErrorKind::InvalidInput, "parse error"));
         } else {
-            clis.push(Cmd {
-                name: cmd,
+            cmds.push(Cmd {
+                name,
                 args,
                 stdout_file,
                 stderr_file,
             });
         }
-        return Ok(clis);
+        return Ok(cmds);
     }
     Err(Error::new(io::ErrorKind::InvalidInput, "parse error"))
 }

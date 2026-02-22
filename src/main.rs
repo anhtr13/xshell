@@ -13,6 +13,8 @@ fn main() -> Result<()> {
     let mut rl = Editor::<InputHelper, DefaultHistory>::with_config(config)?;
     rl.set_helper(Some(helper));
 
+    let mut history = Vec::<String>::new();
+
     loop {
         let input = rl.readline("$ ")?;
         match parse_input(&input) {
@@ -24,13 +26,13 @@ fn main() -> Result<()> {
                     let is_last = idx + 1 == total_cmds;
 
                     if let Ok(builtin) = Builtin::from_str(&cmd.name) {
-                        cmd_io = builtin.run(cmd, is_last);
+                        cmd_io = builtin.run(cmd, &mut history, is_last);
                     } else {
                         if let Err(e) = check_is_excutable(&cmd.name) {
                             eprintln!("{e}");
                             break;
                         }
-                        cmd_io = cmd.run(cmd_io, is_last);
+                        cmd_io = cmd.run(cmd_io, &mut history, is_last);
                     }
                 }
             }
