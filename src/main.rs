@@ -20,7 +20,7 @@ fn run(mut rl: Editor<InputHelper, FileHistory>, history: &mut History) -> Resul
 
                 for (idx, cmd) in cmds.into_iter().enumerate() {
                     rl.add_history_entry(&input)?;
-                    history.add(format!("{} {}", cmd.name, cmd.args.join(" ")));
+                    history.add(input.trim().to_string());
 
                     let is_last = idx + 1 == total_cmds;
 
