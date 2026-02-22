@@ -15,7 +15,7 @@ impl InputHelper {
         InputHelper
     }
 
-    fn get_candidate(word: &str) -> Vec<String> {
+    fn get_candidates(word: &str) -> Vec<String> {
         let mut res = HashSet::new();
         if let Some(path) = std::env::var_os("PATH") {
             std::env::split_paths(&path)
@@ -57,7 +57,7 @@ impl Completer for InputHelper {
                 "ech" => return Ok((0, vec![String::from("echo ")])),
                 "exi" => return Ok((0, vec![String::from("exit ")])),
                 word => {
-                    let mut candidates = Self::get_candidate(word);
+                    let mut candidates = Self::get_candidates(word);
                     if candidates.len() == 1 {
                         candidates[0].push(' ');
                     } else {

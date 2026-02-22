@@ -1,7 +1,7 @@
 mod shell;
 
 use crate::shell::{builtin::Builtin, check_is_excutable, helper::InputHelper, parse_input};
-use rustyline::{Config, Editor, Result, history::DefaultHistory};
+use rustyline::{Config, Editor, Result, config::Configurer, history::DefaultHistory};
 use std::str::FromStr;
 
 fn main() -> Result<()> {
@@ -12,6 +12,7 @@ fn main() -> Result<()> {
     let helper = InputHelper::default();
     let mut rl = Editor::<InputHelper, DefaultHistory>::with_config(config)?;
     rl.set_helper(Some(helper));
+    rl.set_auto_add_history(true);
 
     let mut history = Vec::<String>::new();
 
@@ -23,6 +24,7 @@ fn main() -> Result<()> {
                 let total_cmds = cmds.len();
 
                 for (idx, cmd) in cmds.into_iter().enumerate() {
+                    rl.add_history_entry(&input)?;
                     history.push(format!("{} {}", cmd.name, cmd.args.join(" ")));
 
                     let is_last = idx + 1 == total_cmds;
