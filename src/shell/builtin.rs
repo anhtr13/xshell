@@ -184,8 +184,7 @@ impl Builtin {
         };
         if !output.std_err.is_empty() {
             if let Some(mut file) = cmd.stderr_file {
-                writeln!(&mut file, "{}", output.std_err)
-                    .unwrap_or_else(|e| eprintln!("Error: {e}"));
+                writeln!(&mut file, "{}", output.std_err).unwrap_or_else(|e| eprintln!("{e}"));
             } else {
                 println!("{}", output.std_err);
             }
@@ -193,14 +192,12 @@ impl Builtin {
         let mut pipeout = None;
         if !output.std_out.is_empty() {
             if let Some(mut file) = cmd.stdout_file {
-                writeln!(&mut file, "{}", output.std_out)
-                    .unwrap_or_else(|e| eprintln!("Error: {e}"));
+                writeln!(&mut file, "{}", output.std_out).unwrap_or_else(|e| eprintln!("{e}"));
             } else if !is_last {
                 let (stdout_reader, mut stdout_writer) =
                     io::pipe().expect("Cannot create command pipeline");
                 pipeout = Some(stdout_reader);
-                writeln!(stdout_writer, "{}", output.std_out)
-                    .unwrap_or_else(|e| eprintln!("Error: {e}"))
+                writeln!(stdout_writer, "{}", output.std_out).unwrap_or_else(|e| eprintln!("{e}"))
             } else {
                 println!("{}", output.std_out);
             }

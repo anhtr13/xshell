@@ -1,3 +1,0 @@
-pwd 
-cat hist.txt
-exit 

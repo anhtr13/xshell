@@ -8,11 +8,14 @@ use std::{
     io::{self, Error},
     os::unix::fs::PermissionsExt,
     path::Path,
+    str::FromStr,
 };
 
-use crate::shell::command::Cmd;
+use rustyline::Editor;
 
-pub fn check_is_excutable(name: &str) -> Result<String, String> {
+use crate::shell::{builtin::Builtin, command::Cmd, helper::InputHelper, history::History};
+
+fn check_is_excutable(name: &str) -> Result<String, String> {
     if let Some(path) = std::env::var_os("PATH") {
         for dir in std::env::split_paths(&path) {
             let p = format!("{}/{name}", dir.display());
@@ -30,7 +33,7 @@ pub fn check_is_excutable(name: &str) -> Result<String, String> {
     Err("Cannot get PATH".to_string())
 }
 
-pub fn parse_input(input: &str) -> io::Result<Vec<Cmd>> {
+fn parse_input(input: &str) -> io::Result<Vec<Cmd>> {
     if let Some(input) = shlex::split(input) {
         let mut cmds = Vec::new();
         let mut flag: u8 = 0;
@@ -135,4 +138,34 @@ pub fn parse_input(input: &str) -> io::Result<Vec<Cmd>> {
         return Ok(cmds);
     }
     Err(Error::new(io::ErrorKind::InvalidInput, "parse error"))
+}
+
+pub fn run(rl: &mut Editor<InputHelper, History>) -> rustyline::Result<()> {
+    loop {
+        let input = rl.readline("$ ")?;
+        match parse_input(&input) {
+            Ok(cmds) => {
+                let mut cmd_io = None;
+                let total_cmds = cmds.len();
+
+                for (idx, cmd) in cmds.into_iter().enumerate() {
+                    let is_last = idx + 1 == total_cmds;
+
+                    if let Ok(builtin) = Builtin::from_str(&cmd.name) {
+                        if builtin == Builtin::Exit {
+                            return Ok(());
+                        }
+                        cmd_io = builtin.run(cmd, rl.history_mut(), is_last);
+                    } else {
+                        if let Err(e) = check_is_excutable(&cmd.name) {
+                            eprintln!("{e}");
+                            break;
+                        }
+                        cmd_io = cmd.run(cmd_io, is_last);
+                    }
+                }
+            }
+            Err(e) => eprintln!("{e}"),
+        }
+    }
 }

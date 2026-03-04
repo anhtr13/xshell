@@ -1,0 +1,11 @@
+clear
+cat Cargo.toml
+cat codecrafters.yml
+clear
+clear
+ls
+pwd
+history
+cat Cargo.toml | rg rust
+history
+clear
