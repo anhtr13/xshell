@@ -8,7 +8,7 @@ fn main() -> Result<()> {
     let mut history = History::default();
     if let Ok(histfile) = env::var("HISTFILE") {
         history.append_from_file(&histfile)?;
-        history.history_path = histfile.clone();
+        history.history_path = histfile;
     };
 
     let config = Config::builder()

@@ -33,111 +33,170 @@ fn check_is_excutable(name: &str) -> Result<String, String> {
     Err("Cannot get PATH".to_string())
 }
 
+fn parse_words(intput: &str) -> io::Result<Vec<String>> {
+    enum State {
+        Normal,
+        NormalEscape,
+        SingleQuote,
+        DoubleQuote,
+        DoubleQuoteEscape,
+    }
+    let mut args = Vec::new();
+    let mut state = State::Normal;
+    let mut word = String::new();
+    for c in intput.trim().chars() {
+        match state {
+            State::Normal => match c {
+                ' ' => {
+                    if !word.is_empty() {
+                        args.push(word);
+                        word = String::new();
+                    }
+                }
+                '\\' => state = State::NormalEscape,
+                '\'' => state = State::SingleQuote,
+                '\"' => state = State::DoubleQuote,
+                _ => word.push(c),
+            },
+            State::NormalEscape => {
+                word.push(c);
+                state = State::Normal;
+            }
+            State::SingleQuote => match c {
+                '\'' => state = State::Normal,
+                _ => word.push(c),
+            },
+            State::DoubleQuote => match c {
+                '\"' => state = State::Normal,
+                '\\' => state = State::DoubleQuoteEscape,
+                _ => word.push(c),
+            },
+            State::DoubleQuoteEscape => {
+                match c {
+                    '\\' => word.push('\\'),
+                    '\'' => word.push('\''),
+                    '\"' => word.push('\"'),
+                    'n' => word.push('\n'),
+                    't' => word.push('\t'),
+                    '0' => word.push('\0'),
+                    _ => word.push(c),
+                };
+                state = State::DoubleQuote;
+            }
+        }
+    }
+    if !word.is_empty() {
+        args.push(word);
+    }
+    match state {
+        State::Normal => Ok(args),
+        _ => Err(Error::new(io::ErrorKind::InvalidInput, "parse error")),
+    }
+}
+
 fn parse_input(input: &str) -> io::Result<Vec<Cmd>> {
-    if let Some(input) = shlex::split(input) {
-        let mut cmds = Vec::new();
-        let mut flag: u8 = 0;
-        let mut name = "".to_string();
-        let mut args = Vec::new();
-        let mut stdout_file = None;
-        let mut stderr_file = None;
-        for arg in input {
-            if flag == 0 {
-                match arg.as_str() {
-                    ">" | "1>" => flag = 1,
-                    "2>" => flag = 2,
-                    ">>" | "1>>" => flag = 3,
-                    "2>>" => flag = 4,
-                    "|" => {
-                        if name.is_empty() {
-                            return Err(Error::new(io::ErrorKind::InvalidInput, "parse error"));
-                        }
-                        cmds.push(Cmd {
-                            name,
-                            args,
-                            stdout_file,
-                            stderr_file,
-                        });
-                        name = "".to_string();
-                        args = Vec::new();
-                        stdout_file = None;
-                        stderr_file = None;
-                    }
-                    _ => {
-                        if name.is_empty() {
-                            name = arg;
-                        } else {
-                            args.push(arg);
-                        }
-                    }
-                }
-            } else if flag == 1 {
-                match arg.as_str() {
-                    ">" | "1>" | "2>" | ">>" | "1>>" | "2>>" | "|" => {
+    let words = parse_words(input)?;
+    let mut cmds = Vec::new();
+    let mut flag: u8 = 0;
+    let mut name = "".to_string();
+    let mut args = Vec::new();
+    let mut stdout_file = None;
+    let mut stderr_file = None;
+    for arg in words {
+        if flag == 0 {
+            match arg.as_str() {
+                ">" | "1>" => flag = 1,
+                "2>" => flag = 2,
+                ">>" | "1>>" => flag = 3,
+                "2>>" => flag = 4,
+                "|" => {
+                    if name.is_empty() {
                         return Err(Error::new(io::ErrorKind::InvalidInput, "parse error"));
                     }
-                    _ => {
-                        let f = OpenOptions::new()
-                            .create(true)
-                            .write(true)
-                            .truncate(true)
-                            .open(&arg)?;
-                        stdout_file = Some(f);
-                        flag = 0;
-                    }
+                    cmds.push(Cmd {
+                        name,
+                        args,
+                        stdout_file,
+                        stderr_file,
+                    });
+                    name = "".to_string();
+                    args = Vec::new();
+                    stdout_file = None;
+                    stderr_file = None;
                 }
-            } else if flag == 2 {
-                match arg.as_str() {
-                    ">" | "1>" | "2>" | ">>" | "1>>" | "2>>" | "|" => {
-                        return Err(Error::new(io::ErrorKind::InvalidInput, "parse error"));
-                    }
-                    _ => {
-                        let f = OpenOptions::new()
-                            .create(true)
-                            .write(true)
-                            .truncate(true)
-                            .open(&arg)?;
-                        stderr_file = Some(f);
-                        flag = 0;
-                    }
-                }
-            } else if flag == 3 {
-                match arg.as_str() {
-                    ">" | "1>" | "2>" | ">>" | "1>>" | "2>>" | "|" => {
-                        return Err(Error::new(io::ErrorKind::InvalidInput, "parse error"));
-                    }
-                    _ => {
-                        let f = OpenOptions::new().create(true).append(true).open(&arg)?;
-                        stdout_file = Some(f);
-                        flag = 0;
-                    }
-                }
-            } else if flag == 4 {
-                match arg.as_str() {
-                    ">" | "1>" | "2>" | ">>" | "1>>" | "2>>" | "|" => {
-                        return Err(Error::new(io::ErrorKind::InvalidInput, "parse error"));
-                    }
-                    _ => {
-                        let f = OpenOptions::new().create(true).append(true).open(&arg)?;
-                        stderr_file = Some(f);
-                        flag = 0;
+                _ => {
+                    if name.is_empty() {
+                        name = arg;
+                    } else {
+                        args.push(arg);
                     }
                 }
             }
+        } else if flag == 1 {
+            match arg.as_str() {
+                ">" | "1>" | "2>" | ">>" | "1>>" | "2>>" | "|" => {
+                    return Err(Error::new(io::ErrorKind::InvalidInput, "parse error"));
+                }
+                _ => {
+                    let f = OpenOptions::new()
+                        .create(true)
+                        .write(true)
+                        .truncate(true)
+                        .open(&arg)?;
+                    stdout_file = Some(f);
+                    flag = 0;
+                }
+            }
+        } else if flag == 2 {
+            match arg.as_str() {
+                ">" | "1>" | "2>" | ">>" | "1>>" | "2>>" | "|" => {
+                    return Err(Error::new(io::ErrorKind::InvalidInput, "parse error"));
+                }
+                _ => {
+                    let f = OpenOptions::new()
+                        .create(true)
+                        .write(true)
+                        .truncate(true)
+                        .open(&arg)?;
+                    stderr_file = Some(f);
+                    flag = 0;
+                }
+            }
+        } else if flag == 3 {
+            match arg.as_str() {
+                ">" | "1>" | "2>" | ">>" | "1>>" | "2>>" | "|" => {
+                    return Err(Error::new(io::ErrorKind::InvalidInput, "parse error"));
+                }
+                _ => {
+                    let f = OpenOptions::new().create(true).append(true).open(&arg)?;
+                    stdout_file = Some(f);
+                    flag = 0;
+                }
+            }
+        } else if flag == 4 {
+            match arg.as_str() {
+                ">" | "1>" | "2>" | ">>" | "1>>" | "2>>" | "|" => {
+                    return Err(Error::new(io::ErrorKind::InvalidInput, "parse error"));
+                }
+                _ => {
+                    let f = OpenOptions::new().create(true).append(true).open(&arg)?;
+                    stderr_file = Some(f);
+                    flag = 0;
+                }
+            }
         }
-        if name.is_empty() {
-            return Err(Error::new(io::ErrorKind::InvalidInput, "parse error"));
-        } else {
-            cmds.push(Cmd {
-                name,
-                args,
-                stdout_file,
-                stderr_file,
-            });
-        }
-        return Ok(cmds);
     }
-    Err(Error::new(io::ErrorKind::InvalidInput, "parse error"))
+    if name.is_empty() {
+        return Err(Error::new(io::ErrorKind::InvalidInput, "parse error"));
+    } else {
+        cmds.push(Cmd {
+            name,
+            args,
+            stdout_file,
+            stderr_file,
+        });
+    }
+    Ok(cmds)
 }
 
 pub fn run(rl: &mut Editor<InputHelper, History>) -> rustyline::Result<()> {
