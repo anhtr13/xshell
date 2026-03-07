@@ -1,10 +1,10 @@
 mod shell;
 
 use crate::shell::{helper::InputHelper, history::History};
-use rustyline::{Config, Editor, Result, config::Configurer};
+use rustyline::{Config, Editor, config::Configurer};
 use std::env;
 
-fn main() -> Result<()> {
+fn main() -> anyhow::Result<()> {
     let mut history = History::default();
     if let Ok(histfile) = env::var("HISTFILE") {
         history.append_from_file(&histfile)?;

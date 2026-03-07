@@ -5,7 +5,6 @@ pub mod history;
 
 use std::{
     fs::{OpenOptions, metadata},
-    io::{self, Error},
     os::unix::fs::PermissionsExt,
     path::Path,
     str::FromStr,
@@ -15,7 +14,15 @@ use rustyline::Editor;
 
 use crate::shell::{builtin::Builtin, command::Cmd, helper::InputHelper, history::History};
 
-fn check_is_excutable(name: &str) -> Result<String, String> {
+#[derive(Debug, thiserror::Error)]
+pub enum ShellError {
+    #[error("parse error: {0}")]
+    ParseError(String),
+    #[error("{0}: command not found")]
+    CmdNotFound(String),
+}
+
+fn check_is_excutable(name: &str) -> Result<String, ShellError> {
     if let Some(path) = std::env::var_os("PATH") {
         for dir in std::env::split_paths(&path) {
             let p = format!("{}/{name}", dir.display());
@@ -28,50 +35,50 @@ fn check_is_excutable(name: &str) -> Result<String, String> {
                 return Ok(p);
             }
         }
-        return Err(format!("{name}: command not found"));
+        return Err(ShellError::CmdNotFound(name.to_string()));
     };
-    Err("Cannot get PATH".to_string())
+    Err(ShellError::ParseError("cannot get PATH".to_string()))
 }
 
-fn parse_words(intput: &str) -> io::Result<Vec<String>> {
-    enum State {
-        Normal,
-        NormalEscape,
-        SingleQuote,
-        DoubleQuote,
-        DoubleQuoteEscape,
-    }
+enum ParseWordState {
+    Normal,
+    NormalEscape,
+    SingleQuote,
+    DoubleQuote,
+    DoubleQuoteEscape,
+}
+fn parse_words(intput: &str) -> Result<Vec<String>, ShellError> {
     let mut args = Vec::new();
-    let mut state = State::Normal;
+    let mut state = ParseWordState::Normal;
     let mut word = String::new();
     for c in intput.trim().chars() {
         match state {
-            State::Normal => match c {
+            ParseWordState::Normal => match c {
                 ' ' => {
                     if !word.is_empty() {
                         args.push(word);
                         word = String::new();
                     }
                 }
-                '\\' => state = State::NormalEscape,
-                '\'' => state = State::SingleQuote,
-                '\"' => state = State::DoubleQuote,
+                '\\' => state = ParseWordState::NormalEscape,
+                '\'' => state = ParseWordState::SingleQuote,
+                '\"' => state = ParseWordState::DoubleQuote,
                 _ => word.push(c),
             },
-            State::NormalEscape => {
+            ParseWordState::NormalEscape => {
                 word.push(c);
-                state = State::Normal;
+                state = ParseWordState::Normal;
             }
-            State::SingleQuote => match c {
-                '\'' => state = State::Normal,
+            ParseWordState::SingleQuote => match c {
+                '\'' => state = ParseWordState::Normal,
                 _ => word.push(c),
             },
-            State::DoubleQuote => match c {
-                '\"' => state = State::Normal,
-                '\\' => state = State::DoubleQuoteEscape,
+            ParseWordState::DoubleQuote => match c {
+                '\"' => state = ParseWordState::Normal,
+                '\\' => state = ParseWordState::DoubleQuoteEscape,
                 _ => word.push(c),
             },
-            State::DoubleQuoteEscape => {
+            ParseWordState::DoubleQuoteEscape => {
                 match c {
                     '\\' => word.push('\\'),
                     '\'' => word.push('\''),
@@ -81,7 +88,7 @@ fn parse_words(intput: &str) -> io::Result<Vec<String>> {
                     '0' => word.push('\0'),
                     _ => word.push(c),
                 };
-                state = State::DoubleQuote;
+                state = ParseWordState::DoubleQuote;
             }
         }
     }
@@ -89,29 +96,36 @@ fn parse_words(intput: &str) -> io::Result<Vec<String>> {
         args.push(word);
     }
     match state {
-        State::Normal => Ok(args),
-        _ => Err(Error::new(io::ErrorKind::InvalidInput, "parse error")),
+        ParseWordState::Normal => Ok(args),
+        _ => Err(ShellError::ParseError("cannot parse words".to_string())),
     }
 }
 
-fn parse_input(input: &str) -> io::Result<Vec<Cmd>> {
+enum ParseInputState {
+    Normal,
+    RedirectingStdout,
+    RedirectingStderr,
+    AppendingStdout,
+    AppendingStderr,
+}
+fn parse_input(input: &str) -> anyhow::Result<Vec<Cmd>> {
     let words = parse_words(input)?;
     let mut cmds = Vec::new();
-    let mut flag: u8 = 0;
+    let mut state = ParseInputState::Normal;
     let mut name = "".to_string();
     let mut args = Vec::new();
     let mut stdout_file = None;
     let mut stderr_file = None;
     for arg in words {
-        if flag == 0 {
-            match arg.as_str() {
-                ">" | "1>" => flag = 1,
-                "2>" => flag = 2,
-                ">>" | "1>>" => flag = 3,
-                "2>>" => flag = 4,
+        match state {
+            ParseInputState::Normal => match arg.as_str() {
+                ">" | "1>" => state = ParseInputState::RedirectingStdout,
+                "2>" => state = ParseInputState::RedirectingStderr,
+                ">>" | "1>>" => state = ParseInputState::AppendingStdout,
+                "2>>" => state = ParseInputState::AppendingStderr,
                 "|" => {
                     if name.is_empty() {
-                        return Err(Error::new(io::ErrorKind::InvalidInput, "parse error"));
+                        return Err(ShellError::ParseError("cannot parse input".to_string()).into());
                     }
                     cmds.push(Cmd {
                         name,
@@ -131,11 +145,10 @@ fn parse_input(input: &str) -> io::Result<Vec<Cmd>> {
                         args.push(arg);
                     }
                 }
-            }
-        } else if flag == 1 {
-            match arg.as_str() {
+            },
+            ParseInputState::RedirectingStdout => match arg.as_str() {
                 ">" | "1>" | "2>" | ">>" | "1>>" | "2>>" | "|" => {
-                    return Err(Error::new(io::ErrorKind::InvalidInput, "parse error"));
+                    return Err(ShellError::ParseError("cannot parse input".to_string()).into());
                 }
                 _ => {
                     let f = OpenOptions::new()
@@ -144,13 +157,12 @@ fn parse_input(input: &str) -> io::Result<Vec<Cmd>> {
                         .truncate(true)
                         .open(&arg)?;
                     stdout_file = Some(f);
-                    flag = 0;
+                    state = ParseInputState::Normal;
                 }
-            }
-        } else if flag == 2 {
-            match arg.as_str() {
+            },
+            ParseInputState::RedirectingStderr => match arg.as_str() {
                 ">" | "1>" | "2>" | ">>" | "1>>" | "2>>" | "|" => {
-                    return Err(Error::new(io::ErrorKind::InvalidInput, "parse error"));
+                    return Err(ShellError::ParseError("cannot parse input".to_string()).into());
                 }
                 _ => {
                     let f = OpenOptions::new()
@@ -159,35 +171,33 @@ fn parse_input(input: &str) -> io::Result<Vec<Cmd>> {
                         .truncate(true)
                         .open(&arg)?;
                     stderr_file = Some(f);
-                    flag = 0;
+                    state = ParseInputState::Normal;
                 }
-            }
-        } else if flag == 3 {
-            match arg.as_str() {
+            },
+            ParseInputState::AppendingStdout => match arg.as_str() {
                 ">" | "1>" | "2>" | ">>" | "1>>" | "2>>" | "|" => {
-                    return Err(Error::new(io::ErrorKind::InvalidInput, "parse error"));
+                    return Err(ShellError::ParseError("cannot parse input".to_string()).into());
                 }
                 _ => {
                     let f = OpenOptions::new().create(true).append(true).open(&arg)?;
                     stdout_file = Some(f);
-                    flag = 0;
+                    state = ParseInputState::Normal;
                 }
-            }
-        } else if flag == 4 {
-            match arg.as_str() {
+            },
+            ParseInputState::AppendingStderr => match arg.as_str() {
                 ">" | "1>" | "2>" | ">>" | "1>>" | "2>>" | "|" => {
-                    return Err(Error::new(io::ErrorKind::InvalidInput, "parse error"));
+                    return Err(ShellError::ParseError("cannot parse input".to_string()).into());
                 }
                 _ => {
                     let f = OpenOptions::new().create(true).append(true).open(&arg)?;
                     stderr_file = Some(f);
-                    flag = 0;
+                    state = ParseInputState::Normal;
                 }
-            }
+            },
         }
     }
     if name.is_empty() {
-        return Err(Error::new(io::ErrorKind::InvalidInput, "parse error"));
+        return Err(ShellError::ParseError("cannot parse input".to_string()).into());
     } else {
         cmds.push(Cmd {
             name,
@@ -199,7 +209,7 @@ fn parse_input(input: &str) -> io::Result<Vec<Cmd>> {
     Ok(cmds)
 }
 
-pub fn run(rl: &mut Editor<InputHelper, History>) -> rustyline::Result<()> {
+pub fn run(rl: &mut Editor<InputHelper, History>) -> anyhow::Result<()> {
     loop {
         let input = rl.readline("$ ")?;
         match parse_input(&input) {

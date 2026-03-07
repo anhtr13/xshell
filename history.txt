@@ -13,3 +13,5 @@ cat Cargo.toml | rg rust
 echo               hehehe
 treer         -P                'src'
 treer         -P                'src' --highlight
+history
+clear
