@@ -20,6 +20,8 @@ pub enum ShellError {
     ParseError(String),
     #[error("{0}: command not found")]
     CmdNotFound(String),
+    #[error("Not a builtin command")]
+    NotBuiltin,
 }
 
 fn check_is_excutable(name: &str) -> Result<String, ShellError> {

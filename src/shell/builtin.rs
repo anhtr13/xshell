@@ -7,11 +7,12 @@ use std::{
     str::FromStr,
 };
 
-use crate::shell::{check_is_excutable, command::Cmd, history::History};
+use crate::shell::{ShellError, check_is_excutable, command::Cmd, history::History};
 
+#[allow(unused)]
 #[derive(Debug, Default)]
 pub struct BuiltinOutput {
-    pub _status: u8,
+    pub status: u8,
     pub std_out: String,
     pub std_err: String,
 }
@@ -19,7 +20,7 @@ pub struct BuiltinOutput {
 impl BuiltinOutput {
     pub fn new(status: u8, std_out: String, std_err: String) -> Self {
         Self {
-            _status: status,
+            status,
             std_out,
             std_err,
         }
@@ -50,7 +51,7 @@ impl Display for Builtin {
 }
 
 impl FromStr for Builtin {
-    type Err = &'static str;
+    type Err = ShellError;
     fn from_str(s: &str) -> Result<Self, Self::Err> {
         match s {
             "cd" => Ok(Self::Cd),
@@ -59,7 +60,7 @@ impl FromStr for Builtin {
             "history" => Ok(Self::History),
             "pwd" => Ok(Self::Pwd),
             "type" => Ok(Self::Type),
-            _ => Err("Not a builtin command"),
+            _ => Err(ShellError::NotBuiltin),
         }
     }
 }
@@ -167,7 +168,7 @@ impl Builtin {
                 }
             });
         BuiltinOutput {
-            _status: 0,
+            status: 0,
             std_out: stdout,
             std_err: "".to_string(),
         }
