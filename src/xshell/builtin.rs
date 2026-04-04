@@ -178,11 +178,19 @@ pub fn run_job(jobs: Arc<Mutex<HashMap<u32, Job>>>) -> BuiltinOutput {
     let mut jobs: Vec<&Job> = guard.values().clone().collect();
     jobs.sort_unstable_by_key(|x| x.job_id);
 
+    let job_length = jobs.len();
     let mut output = Vec::new();
-    for job in jobs {
+    for (idx, job) in jobs.into_iter().enumerate() {
+        let marker = if idx == job_length - 1 {
+            "+"
+        } else if idx == job_length - 2 {
+            "-"
+        } else {
+            " "
+        };
         output.push(format!(
-            "[{}]+  Running                 {}",
-            job.job_id, job.command
+            "[{}]{}  Running                 {}",
+            job.job_id, marker, job.command
         ));
     }
 
