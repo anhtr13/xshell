@@ -1,7 +1,7 @@
 use std::{
     fs::File,
     io::{self, PipeReader},
-    process::{Command, Stdio},
+    process::{Child, Command, Stdio},
 };
 
 #[derive(Debug)]
@@ -10,6 +10,7 @@ pub struct ShellCommand {
     pub args: Vec<String>,
     pub stdout_file: Option<File>,
     pub stderr_file: Option<File>,
+    pub is_background_job: bool,
 }
 
 impl ShellCommand {
@@ -17,7 +18,7 @@ impl ShellCommand {
         self,
         stdin: Option<PipeReader>,
         is_last: bool,
-    ) -> anyhow::Result<Option<PipeReader>> {
+    ) -> anyhow::Result<(Child, Option<PipeReader>)> {
         let stdin = if let Some(stdio) = stdin {
             Stdio::from(stdio)
         } else {
@@ -49,10 +50,10 @@ impl ShellCommand {
             .stderr(stderr)
             .spawn()?;
 
-        if is_last {
-            let _ = child.wait();
+        if is_last && !self.is_background_job {
+            child.wait()?;
         }
 
-        Ok(output)
+        Ok((child, output))
     }
 }

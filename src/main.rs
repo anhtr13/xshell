@@ -1,6 +1,6 @@
 mod xshell;
 
-use crate::xshell::{helper::InputHelper, history::History};
+use crate::xshell::{Shell, helper::InputHelper, history::History};
 use rustyline::{Config, Editor, config::Configurer};
 use std::env;
 
@@ -22,7 +22,8 @@ fn main() -> anyhow::Result<()> {
     rl.set_helper(Some(helper));
     rl.set_auto_add_history(true);
 
-    match xshell::run(&mut rl) {
+    let mut shell = Shell::new(&mut rl);
+    match shell.run() {
         Ok(_) => {}
         Err(e) => eprintln!("Error: {e}"),
     }

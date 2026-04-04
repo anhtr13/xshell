@@ -14,11 +14,11 @@ enum WordState {
     DoubleQuoteEscape,
 }
 
-pub fn words_from_input(intput: &str) -> anyhow::Result<Vec<String>> {
+pub fn words_from_input(input: &str) -> anyhow::Result<Vec<String>> {
     let mut args = Vec::new();
     let mut state = WordState::Normal;
     let mut word = String::new();
-    for c in intput.trim().chars() {
+    for c in input.trim().chars() {
         match state {
             WordState::Normal => match c {
                 ' ' => {
@@ -84,6 +84,7 @@ pub fn commands_from_input(input: &str) -> anyhow::Result<Vec<ShellCommand>> {
     let mut args = Vec::new();
     let mut stdout_file = None;
     let mut stderr_file = None;
+
     for arg in words {
         match state {
             PipeState::Normal => match arg.as_str() {
@@ -95,11 +96,17 @@ pub fn commands_from_input(input: &str) -> anyhow::Result<Vec<ShellCommand>> {
                     if name.is_empty() {
                         anyhow::bail!("parse error: cannot parse input")
                     }
+                    if let Some(last_arg) = args.last()
+                        && last_arg == "&"
+                    {
+                        anyhow::bail!("parse error near `|`")
+                    }
                     cmds.push(ShellCommand {
                         name,
                         args,
                         stdout_file,
                         stderr_file,
+                        is_background_job: false,
                     });
                     name = "".to_string();
                     args = Vec::new();
@@ -164,16 +171,20 @@ pub fn commands_from_input(input: &str) -> anyhow::Result<Vec<ShellCommand>> {
             },
         }
     }
+
     if name.is_empty() {
-        anyhow::bail!("parse error: cannot parse input")
+        anyhow::bail!("cannot parse input")
     } else {
+        let is_background_job = args.pop_if(|x| x == "&").is_some();
         cmds.push(ShellCommand {
             name,
             args,
             stdout_file,
             stderr_file,
+            is_background_job,
         });
     }
+
     Ok(cmds)
 }
 
