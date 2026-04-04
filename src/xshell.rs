@@ -59,8 +59,7 @@ impl<'a> Shell<'a> {
                         //     io::stdout().flush().unwrap();
                         // }
                     }
-                    Err(e) => {
-                        eprintln!("error: {e}");
+                    Err(_) => {
                         break;
                     }
                 }
