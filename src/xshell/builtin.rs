@@ -7,7 +7,7 @@ use std::{
     sync::{Arc, Mutex},
 };
 
-use crate::xshell::{Job, history::History, utils::check_command_excutable};
+use crate::xshell::{Job, JobStatus, history::History, utils::check_command_excutable};
 
 #[allow(unused)]
 #[derive(Debug, Default)]
@@ -173,14 +173,19 @@ pub fn run_history(args: &[String], history: &mut History) -> BuiltinOutput {
 }
 
 pub fn run_job(jobs: Arc<Mutex<HashMap<u32, Job>>>) -> BuiltinOutput {
-    let guard = jobs.lock().unwrap();
+    let mut guard = jobs.lock().unwrap();
 
     let mut jobs: Vec<&Job> = guard.values().clone().collect();
-    jobs.sort_unstable_by_key(|x| x.job_id);
+    jobs.sort_unstable_by_key(|x| x.id);
 
     let job_length = jobs.len();
+    let mut done_jobs = Vec::new();
     let mut output = Vec::new();
-    for (idx, job) in jobs.into_iter().enumerate() {
+
+    for (idx, job) in jobs.iter().enumerate() {
+        if job.status == JobStatus::Done {
+            done_jobs.push(job.id);
+        }
         let marker = if idx == job_length - 1 {
             "+"
         } else if idx == job_length - 2 {
@@ -188,10 +193,16 @@ pub fn run_job(jobs: Arc<Mutex<HashMap<u32, Job>>>) -> BuiltinOutput {
         } else {
             " "
         };
+        let status = job.status.to_string();
+        let space = 24 - status.len();
         output.push(format!(
-            "[{}]{}  Running                 {}",
-            job.job_id, marker, job.command
+            "[{}]{}  {}{:space$}{}",
+            job.id, marker, status, "", job.command
         ));
+    }
+
+    for id in done_jobs {
+        guard.remove(&id);
     }
 
     BuiltinOutput::new(0, output.join("\n"), "".to_string())

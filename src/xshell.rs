@@ -6,8 +6,8 @@ mod utils;
 
 use std::{
     collections::HashMap,
+    fmt::Display,
     io::{self, Write},
-    process::Child,
     str::FromStr,
     sync::{
         Arc, Mutex,
@@ -25,12 +25,27 @@ use crate::xshell::{
     utils::{check_command_excutable, commands_from_input},
 };
 
+#[derive(PartialEq)]
+enum JobStatus {
+    Running,
+    Done,
+}
+
+impl Display for JobStatus {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        match self {
+            Self::Running => write!(f, "Running"),
+            Self::Done => write!(f, "Done"),
+        }
+    }
+}
+
 #[allow(unused)]
 pub struct Job {
-    job_id: u32,
-    process_id: u32,
+    id: u32,
+    process: u32,
     command: String,
-    process: Arc<Mutex<Child>>,
+    status: JobStatus,
 }
 
 pub struct Shell<'a> {
@@ -50,7 +65,9 @@ impl<'a> Shell<'a> {
                 match id {
                     Ok(id) => {
                         let mut jobs = jobs2.lock().unwrap();
-                        jobs.remove(&id);
+                        if let Some(job) = jobs.get_mut(&id) {
+                            job.status = JobStatus::Done
+                        }
                         // if let Some(job) = jobs.remove(&id) {
                         //     print!("\r\x1b[2K");
                         //     io::stdout().flush().unwrap();
@@ -119,22 +136,13 @@ impl<'a> Shell<'a> {
                     let mut jobs = self.jobs.lock().unwrap();
                     let job_id = jobs.len() as u32 + 1;
                     let job = cmd.run_as_background_job(job_id, command_io, self.sender.clone())?;
-                    println!("[{}] {}", job_id, job.process_id);
+                    println!("[{}] {}", job_id, job.process);
                     jobs.insert(job_id, job);
                     command_io = None;
                 } else {
                     command_io = cmd.run_as_external_command(command_io, is_last)?;
                 }
             }
-        }
-    }
-}
-
-impl<'a> Drop for Shell<'a> {
-    fn drop(&mut self) {
-        let jobs = self.jobs.lock().unwrap();
-        for job in jobs.values() {
-            let _ = job.process.lock().unwrap().kill();
         }
     }
 }

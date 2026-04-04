@@ -6,7 +6,7 @@ use std::{
     thread,
 };
 
-use crate::xshell::Job;
+use crate::xshell::{Job, JobStatus};
 
 #[derive(Debug)]
 pub struct ShellCommand {
@@ -102,16 +102,14 @@ impl ShellCommand {
                 .expect("cannot acquire lock")
                 .wait()
                 .expect("cannot wait for child process");
-            sender
-                .send(job_id)
-                .expect("cannot send notify");
+            sender.send(job_id).expect("cannot send notify");
         });
 
         Ok(Job {
-            job_id,
-            process_id,
-            process: child,
+            id: job_id,
+            process: process_id,
             command: format!("{} {}", self.name, self.args.join(" ")),
+            status: JobStatus::Running,
         })
     }
 }
