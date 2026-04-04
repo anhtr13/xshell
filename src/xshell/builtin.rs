@@ -33,6 +33,7 @@ pub enum Builtin {
     History,
     Pwd,
     Type,
+    Jobs,
 }
 
 impl Display for Builtin {
@@ -44,6 +45,7 @@ impl Display for Builtin {
             Self::History => write!(f, "history"),
             Self::Pwd => write!(f, "pwd"),
             Self::Type => write!(f, "type"),
+            Self::Jobs => write!(f, "jobs"),
         }
     }
 }
@@ -58,6 +60,7 @@ impl FromStr for Builtin {
             "history" => Ok(Self::History),
             "pwd" => Ok(Self::Pwd),
             "type" => Ok(Self::Type),
+            "jobs" => Ok(Self::Jobs),
             _ => anyhow::bail!("Not a builtin command"),
         }
     }
@@ -165,4 +168,8 @@ pub fn run_history(args: &[String], history: &mut History) -> BuiltinOutput {
         std_out: stdout,
         std_err: "".to_string(),
     }
+}
+
+pub fn run_job() -> BuiltinOutput {
+    BuiltinOutput::new(0, "".to_string(), "".to_string())
 }

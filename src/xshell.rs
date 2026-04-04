@@ -35,6 +35,7 @@ pub fn run(rl: &mut Editor<InputHelper, History>) -> anyhow::Result<()> {
                     Builtin::History => builtin::run_history(&cmd.args, rl.history_mut()),
                     Builtin::Pwd => builtin::run_pwd(),
                     Builtin::Type => builtin::run_type(&cmd.args),
+                    Builtin::Jobs => builtin::run_job(),
                 };
                 if !output.std_err.is_empty() {
                     if let Some(mut file) = cmd.stderr_file {
