@@ -1,8 +1,12 @@
 use std::{
     fs::File,
     io::{self, PipeReader},
-    process::{Child, Command, Stdio},
+    process::{Command, Stdio},
+    sync::{Arc, Mutex, mpsc::Sender},
+    thread,
 };
+
+use crate::xshell::Job;
 
 #[derive(Debug)]
 pub struct ShellCommand {
@@ -14,11 +18,11 @@ pub struct ShellCommand {
 }
 
 impl ShellCommand {
-    pub fn run_external(
+    pub fn run_as_external_command(
         self,
         stdin: Option<PipeReader>,
         is_last: bool,
-    ) -> anyhow::Result<(Child, Option<PipeReader>)> {
+    ) -> anyhow::Result<Option<PipeReader>> {
         let stdin = if let Some(stdio) = stdin {
             Stdio::from(stdio)
         } else {
@@ -54,6 +58,60 @@ impl ShellCommand {
             child.wait()?;
         }
 
-        Ok((child, output))
+        Ok(output)
+    }
+
+    pub fn run_as_background_job(
+        self,
+        job_id: u32,
+        stdin: Option<PipeReader>,
+        sender: Arc<Sender<u32>>,
+    ) -> anyhow::Result<Job> {
+        let stdin = if let Some(stdio) = stdin {
+            Stdio::from(stdio)
+        } else {
+            Stdio::inherit()
+        };
+
+        let stdout = if let Some(stdout_file) = self.stdout_file {
+            Stdio::from(stdout_file)
+        } else {
+            Stdio::inherit()
+        };
+
+        let stderr = if let Some(stderr_file) = self.stderr_file {
+            Stdio::from(stderr_file)
+        } else {
+            Stdio::inherit()
+        };
+
+        let child = Command::new(&self.name)
+            .args(&self.args)
+            .stdin(stdin)
+            .stdout(stdout)
+            .stderr(stderr)
+            .spawn()?;
+
+        let process_id = child.id();
+        let child = Arc::new(Mutex::new(child));
+        let child2 = child.clone();
+
+        thread::spawn(move || {
+            child2
+                .lock()
+                .expect("cannot acquire lock")
+                .wait()
+                .expect("cannot wait for child process");
+            sender
+                .send(job_id)
+                .expect("cannot send notify");
+        });
+
+        Ok(Job {
+            job_id,
+            process_id,
+            process: child,
+            command: format!("{} {}", self.name, self.args.join(" ")),
+        })
     }
 }

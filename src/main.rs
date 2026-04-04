@@ -18,17 +18,18 @@ fn main() -> anyhow::Result<()> {
 
     let helper = InputHelper::default();
 
-    let mut rl = Editor::<InputHelper, History>::with_history(config, history)?;
-    rl.set_helper(Some(helper));
-    rl.set_auto_add_history(true);
+    let mut editor = Editor::<InputHelper, History>::with_history(config, history)?;
+    editor.set_helper(Some(helper));
+    editor.set_auto_add_history(true);
 
-    let mut shell = Shell::new(&mut rl);
+    let mut shell = Shell::new(&mut editor);
     match shell.run() {
         Ok(_) => {}
         Err(e) => eprintln!("Error: {e}"),
     }
+    drop(shell);
 
-    let history = rl.history();
+    let history = editor.history();
     if !history.history_path.is_empty() {
         history.write_to_file(&history.history_path)?;
     }

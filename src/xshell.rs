@@ -5,9 +5,15 @@ pub mod history;
 mod utils;
 
 use std::{
+    collections::HashMap,
     io::{self, Write},
     process::Child,
     str::FromStr,
+    sync::{
+        Arc, Mutex,
+        mpsc::{self, Sender},
+    },
+    thread,
 };
 
 use rustyline::Editor;
@@ -19,22 +25,57 @@ use crate::xshell::{
     utils::{check_command_excutable, commands_from_input},
 };
 
+#[allow(unused)]
+pub struct Job {
+    job_id: u32,
+    process_id: u32,
+    command: String,
+    process: Arc<Mutex<Child>>,
+}
+
 pub struct Shell<'a> {
-    rl: &'a mut Editor<InputHelper, History>,
-    background_jobs: Vec<Child>,
+    editor: &'a mut Editor<InputHelper, History>,
+    jobs: Arc<Mutex<HashMap<u32, Job>>>,
+    sender: Arc<Sender<u32>>,
 }
 
 impl<'a> Shell<'a> {
-    pub fn new(rl: &'a mut Editor<InputHelper, History>) -> Self {
+    pub fn new(editor: &'a mut Editor<InputHelper, History>) -> Self {
+        let jobs = Arc::new(Mutex::new(HashMap::<u32, Job>::new()));
+        let jobs2 = jobs.clone();
+        let (sender, receiver) = mpsc::channel::<u32>();
+        thread::spawn(move || {
+            loop {
+                let id = receiver.recv();
+                match id {
+                    Ok(id) => {
+                        let mut jobs = jobs2.lock().unwrap();
+                        jobs.remove(&id);
+                        // if let Some(job) = jobs.remove(&id) {
+                        //     print!("\r\x1b[2K");
+                        //     io::stdout().flush().unwrap();
+                        //     println!("[{}]+  Done                    {}", job.job_id, job.command);
+                        //     print!("$ ");
+                        //     io::stdout().flush().unwrap();
+                        // }
+                    }
+                    Err(e) => {
+                        eprintln!("error: {e}");
+                        break;
+                    }
+                }
+            }
+        });
         Self {
-            rl,
-            background_jobs: Vec::new(),
+            editor,
+            jobs,
+            sender: Arc::new(sender),
         }
     }
 
     pub fn run(&mut self) -> anyhow::Result<()> {
         loop {
-            let input = self.rl.readline("$ ")?;
+            let input = self.editor.readline("$ ")?;
             let commands = commands_from_input(&input)?;
             let total_commands = commands.len();
             let mut command_io = None;
@@ -46,10 +87,12 @@ impl<'a> Shell<'a> {
                         Builtin::Cd => builtin::run_cd(&cmd.args),
                         Builtin::Echo => builtin::run_echo(&cmd.args),
                         Builtin::Exit => return Ok(()),
-                        Builtin::History => builtin::run_history(&cmd.args, self.rl.history_mut()),
+                        Builtin::History => {
+                            builtin::run_history(&cmd.args, self.editor.history_mut())
+                        }
                         Builtin::Pwd => builtin::run_pwd(),
                         Builtin::Type => builtin::run_type(&cmd.args),
-                        Builtin::Jobs => builtin::run_job(),
+                        Builtin::Jobs => builtin::run_job(self.jobs.clone()),
                     };
                     if !output.std_err.is_empty() {
                         if let Some(mut file) = cmd.stderr_file {
@@ -73,18 +116,26 @@ impl<'a> Shell<'a> {
                 } else if let Err(e) = check_command_excutable(&cmd.name) {
                     eprintln!("{e}");
                     break;
+                } else if cmd.is_background_job {
+                    let mut jobs = self.jobs.lock().unwrap();
+                    let job_id = jobs.len() as u32 + 1;
+                    let job = cmd.run_as_background_job(job_id, command_io, self.sender.clone())?;
+                    println!("[{}] {}", job_id, job.process_id);
+                    jobs.insert(job_id, job);
+                    command_io = None;
                 } else {
-                    let is_background_job = cmd.is_background_job;
-                    let (child, output) = cmd.run_external(command_io, is_last)?;
-                    if is_background_job {
-                        println!("[{}] {}", self.background_jobs.len() + 1, child.id());
-                        self.background_jobs.push(child);
-                        command_io = None;
-                    } else {
-                        command_io = output;
-                    }
+                    command_io = cmd.run_as_external_command(command_io, is_last)?;
                 }
             }
+        }
+    }
+}
+
+impl<'a> Drop for Shell<'a> {
+    fn drop(&mut self) {
+        let jobs = self.jobs.lock().unwrap();
+        for job in jobs.values() {
+            let _ = job.process.lock().unwrap().kill();
         }
     }
 }

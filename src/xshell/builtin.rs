@@ -1,11 +1,13 @@
 use std::{
+    collections::HashMap,
     env::{current_dir, home_dir, set_current_dir},
     fmt::Display,
     path::Path,
     str::FromStr,
+    sync::{Arc, Mutex},
 };
 
-use crate::xshell::{history::History, utils::check_command_excutable};
+use crate::xshell::{Job, history::History, utils::check_command_excutable};
 
 #[allow(unused)]
 #[derive(Debug, Default)]
@@ -170,6 +172,19 @@ pub fn run_history(args: &[String], history: &mut History) -> BuiltinOutput {
     }
 }
 
-pub fn run_job() -> BuiltinOutput {
-    BuiltinOutput::new(0, "".to_string(), "".to_string())
+pub fn run_job(jobs: Arc<Mutex<HashMap<u32, Job>>>) -> BuiltinOutput {
+    let guard = jobs.lock().unwrap();
+
+    let mut jobs: Vec<&Job> = guard.values().clone().collect();
+    jobs.sort_unstable_by_key(|x| x.job_id);
+
+    let mut output = Vec::new();
+    for job in jobs {
+        output.push(format!(
+            "[{}]+  Running                 {}",
+            job.job_id, job.command
+        ));
+    }
+
+    BuiltinOutput::new(0, output.join("\n"), "".to_string())
 }
