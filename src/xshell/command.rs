@@ -5,15 +5,19 @@ use std::{
 };
 
 #[derive(Debug)]
-pub struct Cmd {
+pub struct ShellCommand {
     pub name: String,
     pub args: Vec<String>,
     pub stdout_file: Option<File>,
     pub stderr_file: Option<File>,
 }
 
-impl Cmd {
-    pub fn run(self, stdin: Option<PipeReader>, is_last: bool) -> Option<PipeReader> {
+impl ShellCommand {
+    pub fn run_external(
+        self,
+        stdin: Option<PipeReader>,
+        is_last: bool,
+    ) -> anyhow::Result<Option<PipeReader>> {
         let stdin = if let Some(stdio) = stdin {
             Stdio::from(stdio)
         } else {
@@ -25,8 +29,7 @@ impl Cmd {
         let stdout = if let Some(stdout_file) = self.stdout_file {
             Stdio::from(stdout_file)
         } else if !is_last {
-            let (stdout_reader, stdout_writer) =
-                io::pipe().expect("Cannot create command pipeline");
+            let (stdout_reader, stdout_writer) = io::pipe()?;
             output = Some(stdout_reader);
             Stdio::from(stdout_writer)
         } else {
@@ -44,13 +47,12 @@ impl Cmd {
             .stdin(stdin)
             .stdout(stdout)
             .stderr(stderr)
-            .spawn()
-            .expect("Cannot spawn process");
+            .spawn()?;
 
         if is_last {
             let _ = child.wait();
         }
 
-        output
+        Ok(output)
     }
 }

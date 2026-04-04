@@ -33,9 +33,9 @@ impl History {
             .write(true)
             .truncate(true)
             .open(file_name)?;
-        self.commands.iter().for_each(|line| {
-            writeln!(file, "{}", line).expect("Cannot write to file");
-        });
+        for line in self.commands.iter() {
+            writeln!(file, "{}", line)?;
+        }
         Ok(())
     }
 
@@ -51,9 +51,9 @@ impl History {
                 break;
             }
         }
-        self.commands.iter().skip(idx).for_each(|cmd| {
-            writeln!(file, "{}", cmd).expect("Cannot write to file");
-        });
+        for cmd in self.commands.iter().skip(idx) {
+            writeln!(file, "{}", cmd)?;
+        }
         Ok(())
     }
 }
