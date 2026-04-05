@@ -1,13 +1,11 @@
 use std::{
-    collections::HashMap,
     env::{current_dir, home_dir, set_current_dir},
     fmt::Display,
     path::Path,
     str::FromStr,
-    sync::{Arc, Mutex},
 };
 
-use crate::xshell::{Job, JobStatus, history::History, utils::check_command_excutable};
+use crate::xshell::{Job, history::History, utils::check_command_excutable};
 
 #[allow(unused)]
 #[derive(Debug, Default)]
@@ -172,23 +170,28 @@ pub fn run_history(args: &[String], history: &mut History) -> BuiltinOutput {
     }
 }
 
-pub fn run_job(jobs: Arc<Mutex<HashMap<u32, Job>>>) -> BuiltinOutput {
-    let mut guard = jobs.lock().unwrap();
+pub fn run_job(mut jobs: Vec<Job>) -> BuiltinOutput {
+    if jobs.is_empty() {
+        return BuiltinOutput::new(0, "".to_string(), "".to_string());
+    }
 
-    let mut jobs: Vec<&Job> = guard.values().clone().collect();
-    jobs.sort_unstable_by_key(|x| x.id);
+    jobs.sort_unstable_by_key(|x| x.created_at);
 
-    let job_length = jobs.len();
-    let mut done_jobs = Vec::new();
+    let most_recent = jobs[jobs.len() - 1].pid;
+    let second_most_recent = if jobs.len() == 1 {
+        0
+    } else {
+        jobs[jobs.len() - 2].pid
+    };
+
+    jobs.sort_unstable_by_key(|x| x.number);
+
     let mut output = Vec::new();
 
-    for (idx, job) in jobs.iter().enumerate() {
-        if job.status == JobStatus::Done {
-            done_jobs.push(job.id);
-        }
-        let marker = if idx == job_length - 1 {
+    jobs.iter().for_each(|job| {
+        let marker = if job.pid == most_recent {
             "+"
-        } else if idx == job_length - 2 {
+        } else if job.pid == second_most_recent {
             "-"
         } else {
             " "
@@ -197,13 +200,9 @@ pub fn run_job(jobs: Arc<Mutex<HashMap<u32, Job>>>) -> BuiltinOutput {
         let space = 24 - status.len();
         output.push(format!(
             "[{}]{}  {}{:space$}{}",
-            job.id, marker, status, "", job.command
+            job.number, marker, status, "", job.command
         ));
-    }
-
-    for id in done_jobs {
-        guard.remove(&id);
-    }
+    });
 
     BuiltinOutput::new(0, output.join("\n"), "".to_string())
 }

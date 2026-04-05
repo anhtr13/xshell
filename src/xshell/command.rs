@@ -3,7 +3,7 @@ use std::{
     io::{self, PipeReader},
     process::{Command, Stdio},
     sync::{Arc, Mutex, mpsc::Sender},
-    thread,
+    thread, time,
 };
 
 use crate::xshell::{Job, JobStatus};
@@ -63,9 +63,9 @@ impl ShellCommand {
 
     pub fn run_as_background_job(
         self,
-        job_id: u32,
         stdin: Option<PipeReader>,
         sender: Arc<Sender<u32>>,
+        job_number: u32,
     ) -> anyhow::Result<Job> {
         let stdin = if let Some(stdio) = stdin {
             Stdio::from(stdio)
@@ -92,7 +92,7 @@ impl ShellCommand {
             .stderr(stderr)
             .spawn()?;
 
-        let process_id = child.id();
+        let pid = child.id();
         let child = Arc::new(Mutex::new(child));
         let child2 = child.clone();
 
@@ -102,14 +102,15 @@ impl ShellCommand {
                 .expect("cannot acquire lock")
                 .wait()
                 .expect("cannot wait for child process");
-            sender.send(job_id).expect("cannot send notify");
+            sender.send(job_number).expect("cannot send notify");
         });
 
         Ok(Job {
-            id: job_id,
-            process: process_id,
+            pid,
+            number: job_number,
             command: format!("{} {}", self.name, self.args.join(" ")),
             status: JobStatus::Running,
+            created_at: time::Instant::now(),
         })
     }
 }
