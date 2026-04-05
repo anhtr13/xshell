@@ -68,13 +68,6 @@ impl<'a> Shell<'a> {
                         if let Some(job) = jobs.get_mut(&id) {
                             job.status = JobStatus::Done
                         }
-                        // if let Some(job) = jobs.remove(&id) {
-                        //     print!("\r\x1b[2K");
-                        //     io::stdout().flush().unwrap();
-                        //     println!("[{}]+  Done                    {}", job.job_id, job.command);
-                        //     print!("$ ");
-                        //     io::stdout().flush().unwrap();
-                        // }
                     }
                     Err(_) => {
                         break;
@@ -143,6 +136,18 @@ impl<'a> Shell<'a> {
                     command_io = cmd.run_as_external_command(command_io, is_last)?;
                 }
             }
+
+            if let Ok(mut jobs) = self.jobs.lock() {
+                jobs.values()
+                    .filter(|job| job.status == JobStatus::Done)
+                    .for_each(|job| {
+                        println!(
+                            "[{}]{}  Done                    {}",
+                            job.id, "+", job.command
+                        );
+                    });
+                jobs.retain(|_, job| job.status == JobStatus::Running);
+            };
         }
     }
 }
