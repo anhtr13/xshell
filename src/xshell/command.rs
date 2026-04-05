@@ -10,14 +10,45 @@ use crate::xshell::{Job, JobStatus};
 
 #[derive(Debug)]
 pub struct ShellCommand {
-    pub name: String,
-    pub args: Vec<String>,
-    pub stdout_file: Option<File>,
-    pub stderr_file: Option<File>,
-    pub is_background_job: bool,
+    name: String,
+    args: Vec<String>,
+    stdout_file: Option<File>,
+    stderr_file: Option<File>,
+    is_background_job: bool,
 }
 
 impl ShellCommand {
+    pub fn new(
+        name: String,
+        args: Vec<String>,
+        stdout_file: Option<File>,
+        stderr_file: Option<File>,
+        is_background_job: bool,
+    ) -> Self {
+        Self {
+            name,
+            args,
+            stdout_file,
+            stderr_file,
+            is_background_job,
+        }
+    }
+    pub fn name(&self) -> &str {
+        &self.name
+    }
+    pub fn args(&self) -> &[String] {
+        &self.args
+    }
+    pub fn stdout_file(&self) -> Option<&File> {
+        self.stdout_file.as_ref()
+    }
+    pub fn stderr_file(&self) -> Option<&File> {
+        self.stderr_file.as_ref()
+    }
+    pub fn is_background_job(&self) -> bool {
+        self.is_background_job
+    }
+
     pub fn run_as_external_command(
         self,
         stdin: Option<PipeReader>,

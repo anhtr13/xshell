@@ -101,13 +101,13 @@ pub fn commands_from_input(input: &str) -> anyhow::Result<Vec<ShellCommand>> {
                     {
                         anyhow::bail!("parse error near `|`")
                     }
-                    cmds.push(ShellCommand {
+                    cmds.push(ShellCommand::new(
                         name,
                         args,
                         stdout_file,
                         stderr_file,
-                        is_background_job: false,
-                    });
+                        false,
+                    ));
                     name = "".to_string();
                     args = Vec::new();
                     stdout_file = None;
@@ -176,13 +176,13 @@ pub fn commands_from_input(input: &str) -> anyhow::Result<Vec<ShellCommand>> {
         anyhow::bail!("cannot parse input")
     } else {
         let is_background_job = args.pop_if(|x| x == "&").is_some();
-        cmds.push(ShellCommand {
+        cmds.push(ShellCommand::new(
             name,
             args,
             stdout_file,
             stderr_file,
             is_background_job,
-        });
+        ));
     }
 
     Ok(cmds)

@@ -93,45 +93,45 @@ impl<'a> Shell<'a> {
 
             for (idx, cmd) in commands.into_iter().enumerate() {
                 let is_last = idx + 1 == total_commands;
-                if let Ok(builtin) = Builtin::from_str(&cmd.name) {
+                if let Ok(builtin) = Builtin::from_str(cmd.name()) {
                     let output = match builtin {
-                        Builtin::Cd => builtin::run_cd(&cmd.args),
-                        Builtin::Echo => builtin::run_echo(&cmd.args),
+                        Builtin::Cd => builtin::run_cd(cmd.args()),
+                        Builtin::Echo => builtin::run_echo(cmd.args()),
                         Builtin::History => {
-                            builtin::run_history(&cmd.args, self.editor.history_mut())
+                            builtin::run_history(cmd.args(), self.editor.history_mut())
                         }
                         Builtin::Pwd => builtin::run_pwd(),
-                        Builtin::Type => builtin::run_type(&cmd.args),
+                        Builtin::Type => builtin::run_type(cmd.args()),
                         Builtin::Jobs => builtin::run_job(self.get_jobs()),
                         Builtin::Exit => return Ok(()),
                     };
-                    if !output.std_err.is_empty() {
-                        if let Some(mut file) = cmd.stderr_file {
-                            writeln!(&mut file, "{}", output.std_err)?;
+                    if !output.std_err().is_empty() {
+                        if let Some(mut file) = cmd.stderr_file() {
+                            writeln!(&mut file, "{}", output.std_err())?;
                         } else {
-                            println!("{}", output.std_err);
+                            println!("{}", output.std_err());
                         }
                     }
                     command_io = None;
-                    if !output.std_out.is_empty() {
-                        if let Some(mut file) = cmd.stdout_file {
-                            writeln!(&mut file, "{}", output.std_out)?;
+                    if !output.std_out().is_empty() {
+                        if let Some(mut file) = cmd.stdout_file() {
+                            writeln!(&mut file, "{}", output.std_out())?;
                         } else if !is_last {
                             let (stdout_reader, mut stdout_writer) = io::pipe()?;
                             command_io = Some(stdout_reader);
-                            writeln!(stdout_writer, "{}", output.std_out)?;
+                            writeln!(stdout_writer, "{}", output.std_out())?;
                         } else {
-                            println!("{}", output.std_out);
+                            println!("{}", output.std_out());
                         }
                     }
                     if builtin == Builtin::Jobs {
                         self.clean_job();
                         break;
                     }
-                } else if let Err(e) = check_command_excutable(&cmd.name) {
+                } else if let Err(e) = check_command_excutable(cmd.name()) {
                     eprintln!("{e}");
                     break;
-                } else if cmd.is_background_job {
+                } else if cmd.is_background_job() {
                     let job_number = self.new_job_number();
                     let job = cmd.run_as_background_job(command_io, self.tx.clone(), job_number)?;
                     let job_pid = job.pid;

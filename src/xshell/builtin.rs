@@ -7,14 +7,14 @@ use std::{
 
 use crate::xshell::{Job, JobStatus, history::History, utils::check_command_excutable};
 
-#[allow(unused)]
 #[derive(Debug, Default)]
 pub struct BuiltinOutput {
-    pub status: u8,
-    pub std_out: String,
-    pub std_err: String,
+    status: u8,
+    std_out: String,
+    std_err: String,
 }
 
+#[allow(unused)]
 impl BuiltinOutput {
     pub fn new(status: u8, std_out: String, std_err: String) -> Self {
         Self {
@@ -22,6 +22,15 @@ impl BuiltinOutput {
             std_out,
             std_err,
         }
+    }
+    pub fn status(&self) -> u8 {
+        self.status
+    }
+    pub fn std_out(&self) -> &str {
+        &self.std_out
+    }
+    pub fn std_err(&self) -> &str {
+        &self.std_err
     }
 }
 
