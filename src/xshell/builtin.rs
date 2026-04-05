@@ -5,7 +5,7 @@ use std::{
     str::FromStr,
 };
 
-use crate::xshell::{Job, history::History, utils::check_command_excutable};
+use crate::xshell::{Job, JobStatus, history::History, utils::check_command_excutable};
 
 #[allow(unused)]
 #[derive(Debug, Default)]
@@ -196,11 +196,13 @@ pub fn run_job(mut jobs: Vec<Job>) -> BuiltinOutput {
         } else {
             " "
         };
-        let status = job.status.to_string();
-        let space = 24 - status.len();
+        let space = match job.status {
+            JobStatus::Running => "                 ",
+            JobStatus::Done => "                    ",
+        };
         output.push(format!(
-            "[{}]{}  {}{:space$}{}",
-            job.number, marker, status, "", job.command
+            "[{}]{}  {}{}{}",
+            job.number, marker, job.status, space, job.command
         ));
     });
 

@@ -188,7 +188,10 @@ impl<'a> Shell<'a> {
                     } else {
                         " "
                     };
-                    println!("[{}]{}  Done{:>20}", job.number, marker, job.command);
+                    println!(
+                        "[{}]{}  Done                    {}",
+                        job.number, marker, job.command
+                    );
                 });
         }
     }
