@@ -8,7 +8,7 @@ fn main() -> anyhow::Result<()> {
     let mut history = History::default();
     if let Ok(histfile) = env::var("HISTFILE") {
         history.append_from_file(&histfile)?;
-        history.history_path = histfile;
+        history.set_histfile(histfile);
     };
 
     let config = Config::builder()
@@ -30,8 +30,8 @@ fn main() -> anyhow::Result<()> {
     drop(shell);
 
     let history = editor.history();
-    if !history.history_path.is_empty() {
-        history.write_to_file(&history.history_path)?;
+    if let Some(path) = history.histfile() {
+        history.write_to_file(path)?;
     }
 
     Ok(())

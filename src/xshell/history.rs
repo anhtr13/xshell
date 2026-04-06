@@ -8,14 +8,26 @@ use rustyline::history::History as Rustyline_History;
 
 #[derive(Debug, Default)]
 pub struct History {
-    pub commands: Vec<String>,
-    pub history_path: String,
+    commands: Vec<String>,
+    histfile: Option<String>,
     max_length: usize,
     ignore_dup: bool,
     ignore_space: bool,
 }
 
 impl History {
+    pub fn commands(&self) -> &[String] {
+        &self.commands
+    }
+
+    pub fn histfile(&self) -> Option<&String> {
+        self.histfile.as_ref()
+    }
+
+    pub fn set_histfile(&mut self, path: String) {
+        self.histfile = Some(path);
+    }
+
     pub fn append_from_file(&mut self, file_name: &str) -> io::Result<()> {
         let file = OpenOptions::new().read(true).open(file_name)?;
         let reader = BufReader::new(file);

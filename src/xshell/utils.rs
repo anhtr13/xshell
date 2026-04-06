@@ -14,7 +14,7 @@ enum WordState {
     DoubleQuoteEscape,
 }
 
-fn get_words(input: &str) -> anyhow::Result<Vec<String>> {
+fn get_words(input: String) -> anyhow::Result<Vec<String>> {
     let mut args = Vec::new();
     let mut state = WordState::Normal;
     let mut word = String::new();
@@ -76,12 +76,12 @@ enum PipeState {
     AppendingStderr,
 }
 
-pub fn parse_commands_from_input(input: &str) -> anyhow::Result<Vec<ShellCommand>> {
+pub fn parse_commands_from_input(input: String) -> anyhow::Result<Vec<ShellCommand>> {
     let words = get_words(input)?;
     let mut cmds = Vec::new();
     let mut state = PipeState::Normal;
-    let mut name = "".to_string();
     let mut args = Vec::new();
+    let mut name = String::from("");
     let mut stdout_file = None;
     let mut stderr_file = None;
 
@@ -108,7 +108,7 @@ pub fn parse_commands_from_input(input: &str) -> anyhow::Result<Vec<ShellCommand
                         stderr_file,
                         false,
                     ));
-                    name = "".to_string();
+                    name = String::from("");
                     args = Vec::new();
                     stdout_file = None;
                     stderr_file = None;

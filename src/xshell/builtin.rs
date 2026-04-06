@@ -127,7 +127,7 @@ pub fn run_history(args: &[String], history: &mut History) -> BuiltinOutput {
     let mut skip = 0;
     if !args.is_empty() {
         if let Ok(limit) = args[0].parse::<usize>() {
-            skip = history.commands.len() - limit.min(history.commands.len());
+            skip = history.commands().len() - limit.min(history.commands().len());
         } else if args.len() >= 2 {
             if args[0] == "-r" {
                 match history.append_from_file(&args[1]) {
@@ -161,12 +161,12 @@ pub fn run_history(args: &[String], history: &mut History) -> BuiltinOutput {
     }
     let mut stdout = String::new();
     history
-        .commands
+        .commands()
         .iter()
         .enumerate()
         .skip(skip)
         .for_each(|(i, cmd)| {
-            if i + 1 == history.commands.len() {
+            if i + 1 == history.commands().len() {
                 stdout.push_str(&format!("{:>5}  {}", i + 1, cmd));
             } else {
                 stdout.push_str(&format!("{:>5}  {}\n", i + 1, cmd));

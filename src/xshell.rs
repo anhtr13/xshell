@@ -40,7 +40,6 @@ impl Display for JobStatus {
     }
 }
 
-#[allow(unused)]
 #[derive(Debug, Clone)]
 pub struct Job {
     pid: u32,    // process id
@@ -87,7 +86,7 @@ impl<'a> Shell<'a> {
     pub fn run(&mut self) -> anyhow::Result<()> {
         loop {
             let input = self.editor.readline("$ ")?;
-            let commands = parse_commands_from_input(&input)?;
+            let commands = parse_commands_from_input(input)?;
             let total_commands = commands.len();
             let mut command_io = None;
 
@@ -125,7 +124,7 @@ impl<'a> Shell<'a> {
                         }
                     }
                     if builtin == Builtin::Jobs {
-                        self.clean_job();
+                        self.clean_jobs();
                         break;
                     }
                 } else if let Err(e) = get_command_excutable(cmd.name()) {
@@ -145,7 +144,7 @@ impl<'a> Shell<'a> {
                 }
             }
             self.print_done_jobs();
-            self.clean_job();
+            self.clean_jobs();
         }
     }
 
@@ -202,7 +201,7 @@ impl<'a> Shell<'a> {
             });
     }
 
-    fn clean_job(&mut self) {
+    fn clean_jobs(&mut self) {
         let mut write_jobs = self.jobs.write().unwrap();
         write_jobs.retain(|_, job| job.status == JobStatus::Running);
     }
