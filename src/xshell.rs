@@ -22,7 +22,7 @@ use crate::xshell::{
     builtin::Builtin,
     helper::InputHelper,
     history::History,
-    utils::{check_command_excutable, commands_from_input},
+    utils::{get_command_excutable, parse_commands_from_input},
 };
 
 #[derive(Debug, PartialEq, Clone, Copy)]
@@ -53,7 +53,7 @@ pub struct Job {
 pub struct Shell<'a> {
     editor: &'a mut Editor<InputHelper, History>,
     jobs: Arc<RwLock<HashMap<u32, Job>>>,
-    tx: Arc<Sender<u32>>,
+    tx_done: Arc<Sender<u32>>, // channel for notifying done jobs
 }
 
 impl<'a> Shell<'a> {
@@ -80,14 +80,14 @@ impl<'a> Shell<'a> {
         Self {
             editor,
             jobs,
-            tx: Arc::new(tx),
+            tx_done: Arc::new(tx),
         }
     }
 
     pub fn run(&mut self) -> anyhow::Result<()> {
         loop {
             let input = self.editor.readline("$ ")?;
-            let commands = commands_from_input(&input)?;
+            let commands = parse_commands_from_input(&input)?;
             let total_commands = commands.len();
             let mut command_io = None;
 
@@ -102,7 +102,7 @@ impl<'a> Shell<'a> {
                         }
                         Builtin::Pwd => builtin::run_pwd(),
                         Builtin::Type => builtin::run_type(cmd.args()),
-                        Builtin::Jobs => builtin::run_job(self.get_jobs()),
+                        Builtin::Jobs => builtin::run_job(self.get_all_jobs()),
                         Builtin::Exit => return Ok(()),
                     };
                     if !output.std_err().is_empty() {
@@ -128,15 +128,17 @@ impl<'a> Shell<'a> {
                         self.clean_job();
                         break;
                     }
-                } else if let Err(e) = check_command_excutable(cmd.name()) {
+                } else if let Err(e) = get_command_excutable(cmd.name()) {
                     eprintln!("{e}");
                     break;
                 } else if cmd.is_background_job() {
-                    let job_number = self.new_job_number();
-                    let job = cmd.run_as_background_job(command_io, self.tx.clone(), job_number)?;
-                    let job_pid = job.pid;
+                    let job = cmd.run_as_background_job(
+                        command_io,
+                        self.tx_done.clone(),
+                        self.new_job_number(),
+                    )?;
+                    println!("[{}] {}", job.number, job.pid);
                     self.add_job(job);
-                    println!("[{}] {}", job_number, job_pid);
                     command_io = None;
                 } else {
                     command_io = cmd.run_as_external_command(command_io, is_last)?;
@@ -161,39 +163,43 @@ impl<'a> Shell<'a> {
         write_jobs.insert(job.number, job);
     }
 
-    fn get_jobs(&self) -> Vec<Job> {
+    fn get_all_jobs(&self) -> Vec<Job> {
         let read_jobs = self.jobs.read().unwrap();
         let jobs: Vec<_> = read_jobs.values().cloned().collect();
         jobs
     }
 
     fn print_done_jobs(&self) {
-        let mut jobs = self.get_jobs();
-        if !jobs.is_empty() {
-            jobs.sort_unstable_by_key(|x| x.created_at);
-            let most_recent = jobs[jobs.len() - 1].pid;
-            let second_most_recent = if jobs.len() == 1 {
-                0
-            } else {
-                jobs[jobs.len() - 2].pid
-            };
-            jobs.sort_unstable_by_key(|x| x.number);
-            jobs.iter()
-                .filter(|job| job.status == JobStatus::Done)
-                .for_each(|job| {
-                    let marker = if job.pid == most_recent {
-                        "+"
-                    } else if job.pid == second_most_recent {
-                        "-"
-                    } else {
-                        " "
-                    };
-                    println!(
-                        "[{}]{}  Done                    {}",
-                        job.number, marker, job.command
-                    );
-                });
+        let mut jobs = self.get_all_jobs();
+        if jobs.is_empty() {
+            return;
         }
+        if jobs.len() == 1 {
+            if jobs[0].status == JobStatus::Done {
+                println!(
+                    "[{}]+  Done                    {}",
+                    jobs[0].number, jobs[0].command
+                );
+            }
+            return;
+        }
+        jobs.sort_unstable_by_key(|x| x.created_at);
+        let most_recent = jobs[jobs.len() - 1].pid;
+        let second_most_recent = jobs[jobs.len() - 2].pid;
+        jobs.sort_unstable_by_key(|x| x.number);
+        jobs.iter()
+            .filter(|job| job.status == JobStatus::Done)
+            .for_each(|job| {
+                let marker = match job.pid {
+                    id if id == most_recent => "+",
+                    id if id == second_most_recent => "-",
+                    _ => " ",
+                };
+                println!(
+                    "[{}]{}  Done                    {}",
+                    job.number, marker, job.command
+                );
+            });
     }
 
     fn clean_job(&mut self) {

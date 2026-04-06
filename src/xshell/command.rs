@@ -2,7 +2,7 @@ use std::{
     fs::File,
     io::{self, PipeReader},
     process::{Command, Stdio},
-    sync::{Arc, Mutex, mpsc::Sender},
+    sync::{Arc, mpsc::Sender},
     thread, time,
 };
 
@@ -95,7 +95,7 @@ impl ShellCommand {
     pub fn run_as_background_job(
         self,
         stdin: Option<PipeReader>,
-        sender: Arc<Sender<u32>>,
+        tx_done: Arc<Sender<u32>>,
         job_number: u32,
     ) -> anyhow::Result<Job> {
         let stdin = if let Some(stdio) = stdin {
@@ -116,7 +116,7 @@ impl ShellCommand {
             Stdio::inherit()
         };
 
-        let child = Command::new(&self.name)
+        let mut child = Command::new(&self.name)
             .args(&self.args)
             .stdin(stdin)
             .stdout(stdout)
@@ -124,16 +124,10 @@ impl ShellCommand {
             .spawn()?;
 
         let pid = child.id();
-        let child = Arc::new(Mutex::new(child));
-        let child2 = child.clone();
 
         thread::spawn(move || {
-            child2
-                .lock()
-                .expect("cannot acquire lock")
-                .wait()
-                .expect("cannot wait for child process");
-            sender.send(job_number).expect("cannot send notify");
+            child.wait().expect("command wasn't running");
+            tx_done.send(job_number).expect("tx_done cannot send");
         });
 
         Ok(Job {

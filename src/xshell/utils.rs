@@ -14,7 +14,7 @@ enum WordState {
     DoubleQuoteEscape,
 }
 
-pub fn words_from_input(input: &str) -> anyhow::Result<Vec<String>> {
+fn get_words(input: &str) -> anyhow::Result<Vec<String>> {
     let mut args = Vec::new();
     let mut state = WordState::Normal;
     let mut word = String::new();
@@ -76,8 +76,8 @@ enum PipeState {
     AppendingStderr,
 }
 
-pub fn commands_from_input(input: &str) -> anyhow::Result<Vec<ShellCommand>> {
-    let words = words_from_input(input)?;
+pub fn parse_commands_from_input(input: &str) -> anyhow::Result<Vec<ShellCommand>> {
+    let words = get_words(input)?;
     let mut cmds = Vec::new();
     let mut state = PipeState::Normal;
     let mut name = "".to_string();
@@ -94,7 +94,7 @@ pub fn commands_from_input(input: &str) -> anyhow::Result<Vec<ShellCommand>> {
                 "2>>" => state = PipeState::AppendingStderr,
                 "|" => {
                     if name.is_empty() {
-                        anyhow::bail!("parse error: cannot parse input")
+                        anyhow::bail!("parse error near `|`")
                     }
                     if let Some(last_arg) = args.last()
                         && last_arg == "&"
@@ -123,7 +123,7 @@ pub fn commands_from_input(input: &str) -> anyhow::Result<Vec<ShellCommand>> {
             },
             PipeState::RedirectingStdout => match arg.as_str() {
                 ">" | "1>" | "2>" | ">>" | "1>>" | "2>>" | "|" => {
-                    anyhow::bail!("parse error: cannot parse input")
+                    anyhow::bail!("parse error near `>`")
                 }
                 _ => {
                     let f = OpenOptions::new()
@@ -137,7 +137,7 @@ pub fn commands_from_input(input: &str) -> anyhow::Result<Vec<ShellCommand>> {
             },
             PipeState::RedirectingStderr => match arg.as_str() {
                 ">" | "1>" | "2>" | ">>" | "1>>" | "2>>" | "|" => {
-                    anyhow::bail!("parse error: cannot parse input")
+                    anyhow::bail!("parse error near `>`")
                 }
                 _ => {
                     let f = OpenOptions::new()
@@ -151,7 +151,7 @@ pub fn commands_from_input(input: &str) -> anyhow::Result<Vec<ShellCommand>> {
             },
             PipeState::AppendingStdout => match arg.as_str() {
                 ">" | "1>" | "2>" | ">>" | "1>>" | "2>>" | "|" => {
-                    anyhow::bail!("parse error: cannot parse input")
+                    anyhow::bail!("parse error near `>`")
                 }
                 _ => {
                     let f = OpenOptions::new().create(true).append(true).open(&arg)?;
@@ -161,7 +161,7 @@ pub fn commands_from_input(input: &str) -> anyhow::Result<Vec<ShellCommand>> {
             },
             PipeState::AppendingStderr => match arg.as_str() {
                 ">" | "1>" | "2>" | ">>" | "1>>" | "2>>" | "|" => {
-                    anyhow::bail!("parse error: cannot parse input")
+                    anyhow::bail!("parse error near `>`")
                 }
                 _ => {
                     let f = OpenOptions::new().create(true).append(true).open(&arg)?;
@@ -173,7 +173,7 @@ pub fn commands_from_input(input: &str) -> anyhow::Result<Vec<ShellCommand>> {
     }
 
     if name.is_empty() {
-        anyhow::bail!("cannot parse input")
+        anyhow::bail!("parse error")
     } else {
         let is_background_job = args.pop_if(|x| x == "&").is_some();
         cmds.push(ShellCommand::new(
@@ -188,7 +188,7 @@ pub fn commands_from_input(input: &str) -> anyhow::Result<Vec<ShellCommand>> {
     Ok(cmds)
 }
 
-pub fn check_command_excutable(cmd_name: &str) -> anyhow::Result<String> {
+pub fn get_command_excutable(cmd_name: &str) -> anyhow::Result<String> {
     if let Some(path) = std::env::var_os("PATH") {
         for dir in std::env::split_paths(&path) {
             let p = format!("{}/{}", dir.display(), cmd_name);
