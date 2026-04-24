@@ -1,12 +1,14 @@
 use std::{
-    fs::File,
+    fs::{File, metadata},
     io::{self, PipeReader},
+    os::unix::fs::PermissionsExt,
+    path::Path,
     process::{Command, Stdio},
     sync::{Arc, mpsc::Sender},
     thread, time,
 };
 
-use crate::xshell::{Job, JobStatus};
+use crate::job::{Job, JobStatus};
 
 #[derive(Debug)]
 pub struct ShellCommand {
@@ -138,4 +140,22 @@ impl ShellCommand {
             created_at: time::Instant::now(),
         })
     }
+}
+
+pub fn get_command_excutable(cmd_name: &str) -> anyhow::Result<String> {
+    if let Some(path) = std::env::var_os("PATH") {
+        for dir in std::env::split_paths(&path) {
+            let p = format!("{}/{}", dir.display(), cmd_name);
+            let path = Path::new(&p);
+            if path.is_file()
+                && let Ok(metadata) = metadata(path)
+                && let mode = metadata.permissions().mode()
+                && (mode & 0o100 != 0 || mode & 0o010 != 0 || mode & 0o001 != 0)
+            {
+                return Ok(p);
+            }
+        }
+        anyhow::bail!("{}: command not found", cmd_name)
+    };
+    anyhow::bail!("cannot get PATH")
 }

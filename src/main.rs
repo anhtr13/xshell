@@ -1,6 +1,13 @@
-mod xshell;
+mod builtin;
+mod command;
+mod job;
+mod readline;
+mod shell;
 
-use crate::xshell::{Shell, helper::InputHelper, history::History};
+use crate::{
+    readline::{helper::InputHelper, history::History},
+    shell::Shell,
+};
 use rustyline::{Config, Editor, config::Configurer};
 use std::env;
 

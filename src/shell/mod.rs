@@ -1,53 +1,25 @@
-pub mod builtin;
-pub mod command;
-pub mod helper;
-pub mod history;
-mod utils;
+mod parser;
 
 use std::{
     collections::HashMap,
-    fmt::Display,
     io::{self, Write},
     str::FromStr,
     sync::{
         Arc, RwLock,
         mpsc::{self, Sender},
     },
-    thread, time,
+    thread,
 };
 
 use rustyline::Editor;
 
-use crate::xshell::{
-    builtin::Builtin,
-    helper::InputHelper,
-    history::History,
-    utils::{get_command_excutable, parse_commands_from_input},
+use crate::{
+    builtin::{self, Builtin},
+    command::get_command_excutable,
+    job::{Job, JobStatus, recent_jobs_ids},
+    readline::{helper::InputHelper, history::History},
+    shell::parser::parse_commands_from_input,
 };
-
-#[derive(Debug, PartialEq, Clone, Copy)]
-enum JobStatus {
-    Running,
-    Done,
-}
-
-impl Display for JobStatus {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        match self {
-            Self::Running => write!(f, "Running"),
-            Self::Done => write!(f, "Done"),
-        }
-    }
-}
-
-#[derive(Debug, Clone)]
-pub struct Job {
-    pid: u32,    // process id
-    number: u32, // number in the job queue
-    command: String,
-    status: JobStatus,
-    created_at: time::Instant,
-}
 
 pub struct Shell<'a> {
     editor: &'a mut Editor<InputHelper, History>,
@@ -70,9 +42,7 @@ impl<'a> Shell<'a> {
                             job.status = JobStatus::Done
                         }
                     }
-                    Err(_) => {
-                        break;
-                    }
+                    Err(_) => break,
                 }
             }
         });
@@ -102,6 +72,7 @@ impl<'a> Shell<'a> {
                         Builtin::Pwd => builtin::run_pwd(),
                         Builtin::Type => builtin::run_type(cmd.args()),
                         Builtin::Jobs => builtin::run_job(self.get_all_jobs()),
+                        Builtin::Complete => return Ok(()),
                         Builtin::Exit => return Ok(()),
                     };
                     if !output.std_err().is_empty() {
@@ -173,32 +144,19 @@ impl<'a> Shell<'a> {
         if jobs.is_empty() {
             return;
         }
-        if jobs.len() == 1 {
-            if jobs[0].status == JobStatus::Done {
-                println!(
-                    "[{}]+  Done                    {}",
-                    jobs[0].number, jobs[0].command
-                );
-            }
-            return;
-        }
-        jobs.sort_unstable_by_key(|x| x.created_at);
-        let most_recent = jobs[jobs.len() - 1].pid;
-        let second_most_recent = jobs[jobs.len() - 2].pid;
+        let recent = recent_jobs_ids(&jobs);
         jobs.sort_unstable_by_key(|x| x.number);
-        jobs.iter()
-            .filter(|job| job.status == JobStatus::Done)
-            .for_each(|job| {
-                let marker = match job.pid {
-                    id if id == most_recent => "+",
-                    id if id == second_most_recent => "-",
-                    _ => " ",
-                };
-                println!(
-                    "[{}]{}  Done                    {}",
-                    job.number, marker, job.command
-                );
-            });
+        for job in jobs.iter().filter(|job| job.status == JobStatus::Done) {
+            let marker = match job.pid {
+                id if id == recent.0 => "+",
+                id if id == recent.1 => "-",
+                _ => " ",
+            };
+            println!(
+                "[{}]{}  Done                    {}",
+                job.number, marker, job.command
+            );
+        }
     }
 
     fn clean_jobs(&mut self) {

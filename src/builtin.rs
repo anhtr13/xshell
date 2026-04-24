@@ -5,7 +5,11 @@ use std::{
     str::FromStr,
 };
 
-use crate::xshell::{Job, JobStatus, history::History, utils::get_command_excutable};
+use crate::{
+    command::get_command_excutable,
+    job::{Job, JobStatus, recent_jobs_ids},
+    readline::history::History,
+};
 
 #[derive(Debug, Default)]
 pub struct BuiltinOutput {
@@ -43,6 +47,7 @@ pub enum Builtin {
     Pwd,
     Type,
     Jobs,
+    Complete,
 }
 
 impl Display for Builtin {
@@ -55,6 +60,7 @@ impl Display for Builtin {
             Self::Pwd => write!(f, "pwd"),
             Self::Type => write!(f, "type"),
             Self::Jobs => write!(f, "jobs"),
+            Self::Complete => write!(f, "complete"),
         }
     }
 }
@@ -70,6 +76,7 @@ impl FromStr for Builtin {
             "pwd" => Ok(Self::Pwd),
             "type" => Ok(Self::Type),
             "jobs" => Ok(Self::Jobs),
+            "complete" => Ok(Self::Complete),
             _ => anyhow::bail!("Not a builtin command"),
         }
     }
@@ -184,26 +191,16 @@ pub fn run_job(mut jobs: Vec<Job>) -> BuiltinOutput {
         return BuiltinOutput::new(0, "".to_string(), "".to_string());
     }
 
-    jobs.sort_unstable_by_key(|x| x.created_at);
-
-    let most_recent = jobs[jobs.len() - 1].pid;
-    let second_most_recent = if jobs.len() == 1 {
-        0
-    } else {
-        jobs[jobs.len() - 2].pid
-    };
-
+    let recent = recent_jobs_ids(&jobs);
     jobs.sort_unstable_by_key(|x| x.number);
 
     let mut output = Vec::new();
 
-    jobs.iter().for_each(|job| {
-        let marker = if job.pid == most_recent {
-            "+"
-        } else if job.pid == second_most_recent {
-            "-"
-        } else {
-            " "
+    for job in jobs.iter() {
+        let marker = match job.pid {
+            id if id == recent.0 => "+",
+            id if id == recent.1 => "-",
+            _ => " ",
         };
         let space = match job.status {
             JobStatus::Running => "                 ",
@@ -213,7 +210,7 @@ pub fn run_job(mut jobs: Vec<Job>) -> BuiltinOutput {
             "[{}]{}  {}{}{}",
             job.number, marker, job.status, space, job.command
         ));
-    });
+    }
 
     BuiltinOutput::new(0, output.join("\n"), "".to_string())
 }
