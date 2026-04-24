@@ -64,14 +64,14 @@ impl<'a> Shell<'a> {
                 let is_last = idx + 1 == total_commands;
                 if let Ok(builtin) = Builtin::from_str(cmd.name()) {
                     let output = match builtin {
-                        Builtin::Cd => builtin::run_cd(cmd.args()),
-                        Builtin::Echo => builtin::run_echo(cmd.args()),
+                        Builtin::Cd => builtin::cd::invoke(cmd.args()),
+                        Builtin::Echo => builtin::echo::invoke(cmd.args()),
                         Builtin::History => {
-                            builtin::run_history(cmd.args(), self.editor.history_mut())
+                            builtin::history::invoke(cmd.args(), self.editor.history_mut())
                         }
-                        Builtin::Pwd => builtin::run_pwd(),
-                        Builtin::Type => builtin::run_type(cmd.args()),
-                        Builtin::Jobs => builtin::run_job(self.get_all_jobs()),
+                        Builtin::Pwd => builtin::pwd::invoke(),
+                        Builtin::Type => builtin::r#type::invoke(cmd.args()),
+                        Builtin::Jobs => builtin::jobs::invoke(self.get_all_jobs()),
                         Builtin::Complete => return Ok(()),
                         Builtin::Exit => return Ok(()),
                     };

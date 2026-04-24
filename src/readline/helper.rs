@@ -18,7 +18,9 @@ impl InputHelper {
     fn get_cmd_candidates(prefix: &str) -> Vec<String> {
         let mut candidates = HashSet::new();
 
-        let builtins = ["echo", "exit", "cd", "pwd", "type", "history"];
+        let builtins = [
+            "echo", "exit", "cd", "pwd", "type", "history", "jobs", "complete",
+        ];
         builtins.into_iter().for_each(|cmd| {
             if cmd.starts_with(prefix) {
                 candidates.insert(cmd.to_string());

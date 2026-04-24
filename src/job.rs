@@ -25,11 +25,22 @@ pub struct Job {
 }
 
 pub fn recent_jobs_ids(jobs: &[Job]) -> (u32, u32) {
-    let (mut a, mut b) = (&jobs[0], &jobs[0]);
-    for job in jobs.iter().skip(1) {
-        if job.created_at > a.created_at {
-            b = a;
-            a = job;
+    if jobs.is_empty() {
+        return (0, 0);
+    }
+    if jobs.len() == 1 {
+        return (jobs[0].pid, 0);
+    }
+    let (mut a, mut b) = (&jobs[0], &jobs[1]);
+    if b.created_at > a.created_at {
+        (a, b) = (b, a);
+    }
+    for job in jobs.iter().skip(2) {
+        if job.created_at > b.created_at {
+            b = job;
+        }
+        if b.created_at > a.created_at {
+            (a, b) = (b, a);
         }
     }
     (a.pid, b.pid)
