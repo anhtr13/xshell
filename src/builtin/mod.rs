@@ -1,4 +1,5 @@
 pub mod cd;
+pub mod complete;
 pub mod echo;
 pub mod history;
 pub mod jobs;
@@ -8,29 +9,16 @@ pub mod r#type;
 use std::{fmt::Display, str::FromStr};
 
 #[derive(Debug, Default)]
+#[allow(unused)]
 pub struct BuiltinOutput {
-    status: u8,
-    std_out: String,
-    std_err: String,
+    pub status: u8,
+    pub std_out: String,
 }
 
 #[allow(unused)]
 impl BuiltinOutput {
-    pub fn new(status: u8, std_out: String, std_err: String) -> Self {
-        Self {
-            status,
-            std_out,
-            std_err,
-        }
-    }
-    pub fn status(&self) -> u8 {
-        self.status
-    }
-    pub fn std_out(&self) -> &str {
-        &self.std_out
-    }
-    pub fn std_err(&self) -> &str {
-        &self.std_err
+    pub fn new(status: u8, std_out: String) -> Self {
+        Self { status, std_out }
     }
 }
 

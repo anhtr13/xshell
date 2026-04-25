@@ -3,15 +3,17 @@ use std::{
     path::Path,
 };
 
+use anyhow::Result;
+
 use crate::builtin::BuiltinOutput;
 
-pub fn invoke(args: &[String]) -> BuiltinOutput {
+pub fn invoke(args: Vec<String>) -> Result<BuiltinOutput> {
     let mut home = String::new();
     if args.is_empty() || args[0].as_bytes().first() == Some(&b'~') {
         if let Some(h) = home_dir() {
             home = h.display().to_string();
         } else {
-            return BuiltinOutput::new(1, "".to_string(), "Impossible to get home dir".to_string());
+            anyhow::bail!("Impossible to get home dir")
         }
     }
     let path_string = if args.is_empty() {
@@ -22,11 +24,7 @@ pub fn invoke(args: &[String]) -> BuiltinOutput {
         args[0].to_string()
     };
     match set_current_dir(Path::new(&path_string)) {
-        Ok(_) => BuiltinOutput::default(),
-        Err(_) => BuiltinOutput::new(
-            1,
-            "".to_string(),
-            format!("cd: {}: No such file or directory", path_string),
-        ),
+        Ok(_) => Ok(BuiltinOutput::default()),
+        Err(_) => anyhow::bail!("cd: {}: No such file or directory", path_string),
     }
 }

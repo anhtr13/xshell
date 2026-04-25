@@ -1,5 +1,7 @@
+use anyhow::Result;
+
 use crate::builtin::BuiltinOutput;
 
-pub fn invoke(args: &[String]) -> BuiltinOutput {
-    BuiltinOutput::new(0, args.join(" "), "".to_string())
+pub fn invoke(args: Vec<String>) -> Result<BuiltinOutput> {
+    Ok(BuiltinOutput::new(0, args.join(" ")))
 }

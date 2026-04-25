@@ -1,38 +1,22 @@
+use anyhow::Result;
+
 use crate::{builtin::BuiltinOutput, readline::history::History};
 
-pub fn invoke(args: &[String], history: &mut History) -> BuiltinOutput {
+pub fn invoke(args: Vec<String>, history: &mut History) -> Result<BuiltinOutput> {
     let mut skip = 0;
     if !args.is_empty() {
         if let Ok(limit) = args[0].parse::<usize>() {
             skip = history.commands().len() - limit.min(history.commands().len());
         } else if args.len() >= 2 {
             if args[0] == "-r" {
-                match history.append_from_file(&args[1]) {
-                    Ok(_) => {
-                        return BuiltinOutput::default();
-                    }
-                    Err(e) => {
-                        return BuiltinOutput::new(1, "".to_string(), e.to_string());
-                    }
-                }
+                history.append_from_file(&args[1])?;
+                return Ok(BuiltinOutput::default());
             } else if args[0] == "-w" {
-                match history.write_to_file(&args[1]) {
-                    Ok(_) => {
-                        return BuiltinOutput::default();
-                    }
-                    Err(e) => {
-                        return BuiltinOutput::new(1, "".to_string(), e.to_string());
-                    }
-                }
+                history.write_to_file(&args[1])?;
+                return Ok(BuiltinOutput::default());
             } else if args[0] == "-a" {
-                match history.append_to_file(&args[1]) {
-                    Ok(_) => {
-                        return BuiltinOutput::default();
-                    }
-                    Err(e) => {
-                        return BuiltinOutput::new(1, "".to_string(), e.to_string());
-                    }
-                }
+                history.append_to_file(&args[1])?;
+                return Ok(BuiltinOutput::default());
             }
         }
     }
@@ -49,9 +33,5 @@ pub fn invoke(args: &[String], history: &mut History) -> BuiltinOutput {
                 stdout.push_str(&format!("{:>5}  {}\n", i + 1, cmd));
             }
         });
-    BuiltinOutput {
-        status: 0,
-        std_out: stdout,
-        std_err: "".to_string(),
-    }
+    Ok(BuiltinOutput::new(0, stdout))
 }

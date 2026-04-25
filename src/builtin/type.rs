@@ -1,17 +1,19 @@
 use std::str::FromStr;
 
+use anyhow::Result;
+
 use crate::{
     builtin::{Builtin, BuiltinOutput},
     command::get_command_excutable,
 };
 
-pub fn invoke(args: &[String]) -> BuiltinOutput {
-    let (status, std_out, std_err) = if Builtin::from_str(&args[0]).is_ok() {
-        (0, format!("{} is a shell builtin", args[0]), "".to_string())
-    } else if let Ok(path) = get_command_excutable(&args[0]) {
-        (0, format!("{} is {path}", args[0]), "".to_string())
+pub fn invoke(args: Vec<String>) -> Result<BuiltinOutput> {
+    let ouput = if Builtin::from_str(&args[0]).is_ok() {
+        BuiltinOutput::new(0, format!("{} is a shell builtin", args[0]))
+    } else if let Ok(ex_path) = get_command_excutable(&args[0]) {
+        BuiltinOutput::new(0, format!("{} is {}", args[0], ex_path))
     } else {
-        (1, "".to_string(), format!("{}: not found", args[0]))
+        anyhow::bail!("{}: not found", args[0])
     };
-    BuiltinOutput::new(status, std_out, std_err)
+    Ok(ouput)
 }

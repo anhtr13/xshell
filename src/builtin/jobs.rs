@@ -1,11 +1,13 @@
+use anyhow::Result;
+
 use crate::{
     builtin::BuiltinOutput,
     job::{Job, JobStatus, recent_jobs_ids},
 };
 
-pub fn invoke(mut jobs: Vec<Job>) -> BuiltinOutput {
+pub fn invoke(mut jobs: Vec<Job>) -> Result<BuiltinOutput> {
     if jobs.is_empty() {
-        return BuiltinOutput::new(0, "".to_string(), "".to_string());
+        return Ok(BuiltinOutput::default());
     }
 
     let recent = recent_jobs_ids(&jobs);
@@ -29,5 +31,5 @@ pub fn invoke(mut jobs: Vec<Job>) -> BuiltinOutput {
         ));
     }
 
-    BuiltinOutput::new(0, output.join("\n"), "".to_string())
+    Ok(BuiltinOutput::new(0, output.join("\n")))
 }

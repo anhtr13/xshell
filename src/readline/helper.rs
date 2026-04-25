@@ -1,5 +1,5 @@
 use std::{
-    collections::HashSet,
+    collections::{HashMap, HashSet},
     fs::{self, metadata, read_dir},
     os::unix::fs::PermissionsExt,
 };
@@ -8,11 +8,15 @@ use rustyline::{
     Helper, completion::Completer, highlight::Highlighter, hint::Hinter, validate::Validator,
 };
 
-pub struct InputHelper;
+pub struct InputHelper {
+    pub completers: HashMap<String, String>,
+}
 
 impl InputHelper {
     pub fn default() -> Self {
-        InputHelper
+        InputHelper {
+            completers: HashMap::new(),
+        }
     }
 
     fn get_cmd_candidates(prefix: &str) -> Vec<String> {
@@ -21,6 +25,7 @@ impl InputHelper {
         let builtins = [
             "echo", "exit", "cd", "pwd", "type", "history", "jobs", "complete",
         ];
+
         builtins.into_iter().for_each(|cmd| {
             if cmd.starts_with(prefix) {
                 candidates.insert(cmd.to_string());
