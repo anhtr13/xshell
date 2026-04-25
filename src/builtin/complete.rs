@@ -12,16 +12,16 @@ pub fn invoke(
         match args[0].as_str() {
             "-C" => {
                 anyhow::ensure!(args.len() == 3);
-                let key = args.pop().unwrap();
-                let pattern = args.pop().unwrap();
-                completers.insert(key, pattern);
+                let command = args.pop().unwrap();
+                let completer = args.pop().unwrap();
+                completers.insert(command, completer);
             }
             "-p" => {
                 anyhow::ensure!(args.len() == 2);
-                if let Some(pattern) = completers.get(&args[1]) {
+                if let Some(complete_path) = completers.get(&args[1]) {
                     return Ok(BuiltinOutput::new(
                         0,
-                        format!("complete -C '{}' {}", pattern, args[1]),
+                        format!("complete -C '{}' {}", complete_path, args[1]),
                     ));
                 } else {
                     return Ok(BuiltinOutput::new(

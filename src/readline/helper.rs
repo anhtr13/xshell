@@ -2,6 +2,7 @@ use std::{
     collections::{HashMap, HashSet},
     fs::{self, metadata, read_dir},
     os::unix::fs::PermissionsExt,
+    process::Command,
 };
 
 use rustyline::{
@@ -19,38 +20,51 @@ impl InputHelper {
         }
     }
 
-    fn get_cmd_candidates(prefix: &str) -> Vec<String> {
+    fn registered_completion(&self, command: &str) -> anyhow::Result<Vec<String>> {
+        let Some(completer) = self.completers.get(command) else {
+            anyhow::bail!("No completer registered")
+        };
+        let output = Command::new(completer).output()?;
+        let completions = String::from_utf8(output.stdout)?;
+        let candidates: Vec<_> = completions
+            .trim_end_matches('\n')
+            .split('\n')
+            .map(|completion| format!("{command} {completion} "))
+            .collect();
+        Ok(candidates)
+    }
+
+    fn command_completions(prefix: &str) -> Vec<String> {
         let mut candidates = HashSet::new();
 
         let builtins = [
             "echo", "exit", "cd", "pwd", "type", "history", "jobs", "complete",
         ];
 
-        builtins.into_iter().for_each(|cmd| {
+        for cmd in builtins.into_iter() {
             if cmd.starts_with(prefix) {
                 candidates.insert(cmd.to_string());
             }
-        });
+        }
 
-        if let Some(path) = std::env::var_os("PATH") {
-            std::env::split_paths(&path)
-                .map(|dir| read_dir(&dir))
-                .filter_map(std::io::Result::ok)
-                .for_each(|dir| {
-                    dir.filter_map(std::io::Result::ok).for_each(|entry| {
-                        let entry_path = entry.path();
-                        if entry_path.is_file()
-                            && let Some(name) = entry.file_name().to_str()
-                            && !candidates.contains(name)
-                            && let Ok(metadata) = metadata(&entry_path)
-                            && let mode = metadata.permissions().mode()
-                            && (mode & 0o100 != 0 || mode & 0o010 != 0 || mode & 0o001 != 0)
-                            && name.starts_with(prefix)
-                        {
-                            candidates.insert(name.to_string());
-                        }
-                    });
-                });
+        let path = std::env::var_os("PATH").expect("PATH not found");
+        for dir in std::env::split_paths(&path)
+            .map(|dir| read_dir(&dir))
+            .filter_map(std::io::Result::ok)
+        {
+            dir.filter_map(std::io::Result::ok).for_each(|entry| {
+                let entry_path = entry.path();
+                if entry_path.is_file()
+                    && let Some(name) = entry.file_name().to_str()
+                    && !candidates.contains(name)
+                    && let Ok(metadata) = metadata(&entry_path)
+                    && let mode = metadata.permissions().mode()
+                    && (mode & 0o100 != 0 || mode & 0o010 != 0 || mode & 0o001 != 0)
+                    && name.starts_with(prefix)
+                {
+                    candidates.insert(name.to_string());
+                }
+            });
         }
 
         let mut candidates: Vec<String> = candidates.into_iter().collect();
@@ -60,44 +74,34 @@ impl InputHelper {
         candidates
     }
 
-    fn get_directory_completions(cmd: &str, dir_prefix: &str) -> Vec<String> {
+    fn directory_completions(line: &str) -> Vec<String> {
         let mut candidates = Vec::new();
-        let mut pre_arg = cmd.to_string();
-        let paths: Vec<&str> = dir_prefix.split("/").collect();
-        if paths.len() == 1 {
-            let dir_prefix = paths[0];
-            pre_arg.push(' ');
-            if let Ok(reader) = fs::read_dir(".") {
-                reader.filter_map(Result::ok).for_each(|entry| {
-                    let dir_name = entry.file_name().display().to_string();
-                    if dir_name.starts_with(dir_prefix) {
-                        if entry.path().is_dir() {
-                            candidates.push(format!("{dir_name}/"));
-                        } else {
-                            candidates.push(dir_name);
-                        }
+        let (lhs, path) = line.rsplit_once(' ').unwrap_or(("", line));
+        let (dir, pattern) = path.rsplit_once('/').unwrap_or(("", path));
+        let (prefix, dir) = if dir.is_empty() {
+            (String::new(), ".")
+        } else {
+            (format!("{dir}/"), dir)
+        };
+        if let Ok(reader) = fs::read_dir(dir) {
+            for entry in reader.filter_map(Result::ok) {
+                let entry_name = entry.file_name().display().to_string();
+                if entry_name.starts_with(pattern) {
+                    if entry.path().is_dir() {
+                        candidates.push(format!("{prefix}{entry_name}/"));
+                    } else {
+                        candidates.push(format!("{prefix}{entry_name}"));
                     }
-                });
-            }
-        } else if paths.len() >= 2 {
-            let dir_prefix = paths[paths.len() - 1];
-            let dir = paths[..paths.len() - 1].join("/");
-            pre_arg = format!("{pre_arg} {dir}/");
-            if let Ok(reader) = fs::read_dir(dir) {
-                reader.filter_map(Result::ok).for_each(|entry| {
-                    let dir_name = entry.file_name().display().to_string();
-                    if dir_name.starts_with(dir_prefix) {
-                        if entry.path().is_dir() {
-                            candidates.push(format!("{dir_name}/"));
-                        } else {
-                            candidates.push(dir_name);
-                        }
-                    }
-                });
+                }
             }
         }
         if candidates.len() == 1 {
-            candidates[0] = format!("{pre_arg}{}", candidates[0]);
+            let lhs = if lhs.is_empty() {
+                String::new()
+            } else {
+                format!("{lhs} ")
+            };
+            candidates[0] = format!("{lhs}{}", candidates[0]);
             if !candidates[0].ends_with("/") {
                 candidates[0].push(' ');
             }
@@ -111,8 +115,11 @@ impl InputHelper {
                     break;
                 }
             }
-            if !lcp.is_empty() && lcp != dir_prefix {
-                return vec![format!("{pre_arg}{lcp}")];
+            if !lcp.is_empty() && !line.ends_with(&lcp) {
+                if lhs.is_empty() {
+                    return vec![lcp];
+                }
+                return vec![format!("{lhs} {lcp}")];
             }
         }
         candidates
@@ -123,36 +130,30 @@ impl Completer for InputHelper {
     type Candidate = String;
 
     fn complete(
-        &self, // FIXME should be `&mut self`
+        &self,
         line: &str,
         pos: usize,
         _ctx: &rustyline::Context<'_>,
     ) -> rustyline::Result<(usize, Vec<Self::Candidate>)> {
-        let mut args: Vec<&str> = line.split_whitespace().collect();
-        let mut candidates = Vec::new();
-
-        if pos == line.len() {
-            if line.ends_with(" ") {
-                args.push("");
-            }
-            if args.len() == 1 {
-                candidates = Self::get_cmd_candidates(args[0]);
-            } else if args.len() >= 2
-                && let Some(prefix) = args.last()
-                && !prefix.starts_with("-")
-            {
-                candidates =
-                    Self::get_directory_completions(&args[..args.len() - 1].join(" "), prefix);
-            }
-
-            if candidates.len() >= 2 {
-                candidates.sort_unstable();
-            }
-
+        if line.ends_with(' ')
+            && let Ok(candidates) = self.registered_completion(line.trim_end())
+        {
             return Ok((0, candidates));
         }
 
-        Ok((0, vec![String::from(line)]))
+        let mut candidates = Vec::new();
+
+        if pos == line.len() {
+            candidates = Self::command_completions(line);
+            if candidates.is_empty() {
+                candidates = Self::directory_completions(line);
+            }
+            if candidates.len() >= 2 {
+                candidates.sort_unstable();
+            }
+        }
+
+        Ok((0, candidates))
     }
     // fn update(
     //     &self,

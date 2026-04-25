@@ -107,9 +107,8 @@ impl<'a> Shell<'a> {
                         self.clean_jobs();
                         break;
                     }
-                } else if let Err(e) = get_command_excutable(&cmd.name) {
-                    eprintln!("{e}");
-                    break;
+                } else if get_command_excutable(&cmd.name).is_none() {
+                    println!("{}: command not found", cmd.name);
                 } else if cmd.is_background_job {
                     let job = cmd.run_as_background_job(
                         command_io,
@@ -120,7 +119,13 @@ impl<'a> Shell<'a> {
                     self.add_job(job);
                     command_io = None;
                 } else {
-                    command_io = cmd.run_as_external_command(command_io, is_last)?;
+                    match cmd.run_as_external_command(command_io, is_last) {
+                        Ok(output) => command_io = output,
+                        Err(e) => {
+                            println!("{e}");
+                            command_io = None;
+                        }
+                    }
                 }
             }
             self.print_done_jobs();

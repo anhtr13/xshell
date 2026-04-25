@@ -127,20 +127,18 @@ impl ShellCommand {
     }
 }
 
-pub fn get_command_excutable(cmd_name: &str) -> anyhow::Result<String> {
-    if let Some(path) = std::env::var_os("PATH") {
-        for dir in std::env::split_paths(&path) {
-            let p = format!("{}/{}", dir.display(), cmd_name);
-            let path = Path::new(&p);
-            if path.is_file()
-                && let Ok(metadata) = metadata(path)
-                && let mode = metadata.permissions().mode()
-                && (mode & 0o100 != 0 || mode & 0o010 != 0 || mode & 0o001 != 0)
-            {
-                return Ok(p);
-            }
+pub fn get_command_excutable(cmd_name: &str) -> Option<String> {
+    let path = std::env::var_os("PATH").expect("PATH not found");
+    for dir in std::env::split_paths(&path) {
+        let p = format!("{}/{}", dir.display(), cmd_name);
+        let path = Path::new(&p);
+        if path.is_file()
+            && let Ok(metadata) = metadata(path)
+            && let mode = metadata.permissions().mode()
+            && (mode & 0o100 != 0 || mode & 0o010 != 0 || mode & 0o001 != 0)
+        {
+            return Some(p);
         }
-        anyhow::bail!("{}: command not found", cmd_name)
-    };
-    anyhow::bail!("cannot get PATH")
+    }
+    None
 }
