@@ -21,41 +21,51 @@ impl InputHelper {
         }
     }
 
-    fn register_completions(&self, line: &str, pos: usize) -> Result<Vec<String>> {
-        let (lhs, word) = line.trim().rsplit_once(' ').unwrap_or((line.trim(), ""));
-        let (cmd, prev_word) = lhs
+    fn register_completions(&self, line: &str, pos: usize) -> Result<(usize, Vec<String>)> {
+        let (lhs, word) = line.trim().rsplit_once(' ').unwrap_or((line.trim(), "")); // lhs: left hand side
+
+        anyhow::ensure!(
+            line.ends_with(' ') || !word.is_empty(),
+            "Line must end with space or current word must not empty"
+        );
+
+        let (cmd, mut prev_word) = lhs
             .trim_end()
             .rsplit_once(' ')
             .unwrap_or((lhs.trim_end(), ""));
-
-        let Some(completer) = self.completers.get(cmd) else {
-            anyhow::bail!("No completer registered");
-        };
+        if prev_word.is_empty() && !word.is_empty() {
+            prev_word = cmd;
+        }
         let args = [cmd, word, prev_word];
         let envs = HashMap::from([
             ("COMP_LINE", line.to_string()),
             ("COMP_POINT", pos.to_string()),
         ]);
+        let Some(completer) = self.completers.get(cmd) else {
+            anyhow::bail!("No completer registered");
+        };
 
         let output = Command::new(completer).args(args).envs(envs).output()?;
         let completions = String::from_utf8(output.stdout)?;
 
-        let gap = if prev_word.is_empty() {
-            " ".to_string()
-        } else {
-            format!(" {prev_word} ")
-        };
-        let candidates: Vec<_> = completions
+        let mut candidates: Vec<_> = completions
             .trim_end_matches('\n')
             .split('\n')
             .filter(|line| !line.is_empty())
-            .map(|completion| format!("{cmd}{gap}{completion} "))
+            .map(|line| line.to_string())
             .collect();
 
-        Ok(candidates)
+        if candidates.len() == 1 {
+            candidates[0].push(' ');
+        }
+
+        Ok((line.len() - word.len(), candidates))
     }
 
-    fn command_completions(prefix: &str) -> Vec<String> {
+    fn command_completions(line: &str) -> Result<(usize, Vec<String>)> {
+        anyhow::ensure!(!line.ends_with(' '));
+
+        let (lhs, pattern) = line.rsplit_once(' ').unwrap_or(("", line));
         let mut candidates = HashSet::new();
 
         let builtins = [
@@ -63,7 +73,7 @@ impl InputHelper {
         ];
 
         for cmd in builtins.into_iter() {
-            if cmd.starts_with(prefix) {
+            if cmd.starts_with(pattern) {
                 candidates.insert(cmd.to_string());
             }
         }
@@ -81,7 +91,7 @@ impl InputHelper {
                     && let Ok(metadata) = metadata(&entry_path)
                     && let mode = metadata.permissions().mode()
                     && (mode & 0o100 != 0 || mode & 0o010 != 0 || mode & 0o001 != 0)
-                    && name.starts_with(prefix)
+                    && name.starts_with(pattern)
                 {
                     candidates.insert(name.to_string());
                 }
@@ -92,58 +102,36 @@ impl InputHelper {
         if candidates.len() == 1 {
             candidates[0].push(' ');
         }
-        candidates
+
+        Ok((lhs.len(), candidates))
     }
 
-    fn directory_completions(line: &str) -> Vec<String> {
-        let mut candidates = Vec::new();
-        let (lhs, path) = line.rsplit_once(' ').unwrap_or(("", line)); // lhs: left hand side
+    fn directory_completions(line: &str) -> Result<(usize, Vec<String>)> {
+        let (lhs, path) = line.rsplit_once(' ').unwrap_or(("", line));
         let (dir, pattern) = path.rsplit_once('/').unwrap_or(("", path));
-        let (prefix, dir) = if dir.is_empty() {
-            (String::new(), ".")
-        } else {
-            (format!("{dir}/"), dir)
+        let (offset, dir) = match (lhs.len(), dir.len()) {
+            (0, 0) => (0, "."),
+            (x, 0) => (x + 1, "."),
+            (0, y) => (y + 1, dir),
+            (x, y) => (x + y + 2, dir),
         };
+        let mut candidates = Vec::new();
         if let Ok(reader) = fs::read_dir(dir) {
             for entry in reader.filter_map(Result::ok) {
                 let entry_name = entry.file_name().display().to_string();
                 if entry_name.starts_with(pattern) {
                     if entry.path().is_dir() {
-                        candidates.push(format!("{prefix}{entry_name}/"));
+                        candidates.push(format!("{entry_name}/"));
                     } else {
-                        candidates.push(format!("{prefix}{entry_name}"));
+                        candidates.push(entry_name);
                     }
                 }
             }
         }
-        if candidates.len() == 1 {
-            let lhs = if lhs.is_empty() {
-                String::new()
-            } else {
-                format!("{lhs} ")
-            };
-            candidates[0] = format!("{lhs}{}", candidates[0]);
-            if !candidates[0].ends_with("/") {
-                candidates[0].push(' ');
-            }
-        } else if candidates.len() >= 2 {
-            let mut lcp = candidates[0].clone(); // lcp: longest common prefix
-            for c in candidates.iter().skip(1) {
-                while !lcp.is_empty() && !c.starts_with(&lcp) {
-                    lcp.pop();
-                }
-                if lcp.is_empty() {
-                    break;
-                }
-            }
-            if !lcp.is_empty() && !line.ends_with(&lcp) {
-                if lhs.is_empty() {
-                    return vec![lcp];
-                }
-                return vec![format!("{lhs} {lcp}")];
-            }
+        if candidates.len() == 1 && !candidates[0].ends_with("/") {
+            candidates[0].push(' ');
         }
-        candidates
+        Ok((offset, candidates))
     }
 }
 
@@ -156,24 +144,21 @@ impl Completer for InputHelper {
         pos: usize,
         _ctx: &rustyline::Context<'_>,
     ) -> rustyline::Result<(usize, Vec<Self::Candidate>)> {
-        if let Ok(candidates) = self.register_completions(line, pos)
-            && !candidates.is_empty()
+        let line = &line[..pos];
+        if let Ok(completion) = self.register_completions(line, pos)
+            && !completion.1.is_empty()
         {
-            return Ok((0, candidates));
+            return Ok(completion);
+        }
+        let mut completion = Self::command_completions(line).unwrap_or((pos, Vec::new()));
+        if completion.1.is_empty() {
+            completion = Self::directory_completions(line).unwrap_or((pos, Vec::new()));
+        }
+        if completion.1.len() >= 2 {
+            completion.1.sort_unstable();
         }
 
-        if pos == line.len() {
-            let mut candidates = Self::command_completions(line);
-            if candidates.is_empty() {
-                candidates = Self::directory_completions(line);
-            }
-            if candidates.len() >= 2 {
-                candidates.sort_unstable();
-            }
-            return Ok((0, candidates));
-        }
-
-        Ok((0, Vec::new()))
+        Ok(completion)
     }
     // fn update(
     //     &self,
