@@ -5,6 +5,7 @@ use std::{
     process::Command,
 };
 
+use anyhow::Result;
 use rustyline::{
     Helper, completion::Completer, highlight::Highlighter, hint::Hinter, validate::Validator,
 };
@@ -20,17 +21,29 @@ impl InputHelper {
         }
     }
 
-    fn registered_completion(&self, command: &str) -> anyhow::Result<Vec<String>> {
-        let Some(completer) = self.completers.get(command) else {
-            anyhow::bail!("No completer registered")
+    fn register_completions(&self, line: &str) -> Result<Vec<String>> {
+        let (lhs, word) = line.rsplit_once(' ').unwrap_or((line, ""));
+        let (cmd, prev_word) = lhs.rsplit_once(' ').unwrap_or((line, ""));
+        let Some(completer) = self.completers.get(cmd) else {
+            anyhow::bail!("No completer registered");
         };
-        let output = Command::new(completer).output()?;
+        let output = Command::new(completer)
+            .args([cmd, word, prev_word])
+            .output()?;
+
         let completions = String::from_utf8(output.stdout)?;
+        let gap = if prev_word.is_empty() {
+            " ".to_string()
+        } else {
+            format!(" {prev_word} ")
+        };
+
         let candidates: Vec<_> = completions
             .trim_end_matches('\n')
             .split('\n')
-            .map(|completion| format!("{command} {completion} "))
+            .map(|completion| format!("{cmd}{gap}{completion} "))
             .collect();
+
         Ok(candidates)
     }
 
@@ -76,7 +89,7 @@ impl InputHelper {
 
     fn directory_completions(line: &str) -> Vec<String> {
         let mut candidates = Vec::new();
-        let (lhs, path) = line.rsplit_once(' ').unwrap_or(("", line));
+        let (lhs, path) = line.rsplit_once(' ').unwrap_or(("", line)); // lhs: left hand side
         let (dir, pattern) = path.rsplit_once('/').unwrap_or(("", path));
         let (prefix, dir) = if dir.is_empty() {
             (String::new(), ".")
@@ -106,7 +119,7 @@ impl InputHelper {
                 candidates[0].push(' ');
             }
         } else if candidates.len() >= 2 {
-            let mut lcp = candidates[0].clone();
+            let mut lcp = candidates[0].clone(); // lcp: longest common prefix
             for c in candidates.iter().skip(1) {
                 while !lcp.is_empty() && !c.starts_with(&lcp) {
                     lcp.pop();
@@ -135,25 +148,24 @@ impl Completer for InputHelper {
         pos: usize,
         _ctx: &rustyline::Context<'_>,
     ) -> rustyline::Result<(usize, Vec<Self::Candidate>)> {
-        if line.ends_with(' ')
-            && let Ok(candidates) = self.registered_completion(line.trim_end())
+        if let Ok(candidates) = self.register_completions(line.trim_end())
+            && !candidates.is_empty()
         {
             return Ok((0, candidates));
         }
 
-        let mut candidates = Vec::new();
-
         if pos == line.len() {
-            candidates = Self::command_completions(line);
+            let mut candidates = Self::command_completions(line);
             if candidates.is_empty() {
                 candidates = Self::directory_completions(line);
             }
             if candidates.len() >= 2 {
                 candidates.sort_unstable();
             }
+            return Ok((0, candidates));
         }
 
-        Ok((0, candidates))
+        Ok((0, Vec::new()))
     }
     // fn update(
     //     &self,
