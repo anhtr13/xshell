@@ -21,26 +21,34 @@ impl InputHelper {
         }
     }
 
-    fn register_completions(&self, line: &str) -> Result<Vec<String>> {
-        let (lhs, word) = line.rsplit_once(' ').unwrap_or((line, ""));
-        let (cmd, prev_word) = lhs.rsplit_once(' ').unwrap_or((line, ""));
+    fn register_completions(&self, line: &str, pos: usize) -> Result<Vec<String>> {
+        let (lhs, word) = line.trim().rsplit_once(' ').unwrap_or((line.trim(), ""));
+        let (cmd, prev_word) = lhs
+            .trim_end()
+            .rsplit_once(' ')
+            .unwrap_or((lhs.trim_end(), ""));
+
         let Some(completer) = self.completers.get(cmd) else {
             anyhow::bail!("No completer registered");
         };
-        let output = Command::new(completer)
-            .args([cmd, word, prev_word])
-            .output()?;
+        let args = [cmd, word, prev_word];
+        let envs = HashMap::from([
+            ("COMP_LINE", line.to_string()),
+            ("COMP_POINT", pos.to_string()),
+        ]);
 
+        let output = Command::new(completer).args(args).envs(envs).output()?;
         let completions = String::from_utf8(output.stdout)?;
+
         let gap = if prev_word.is_empty() {
             " ".to_string()
         } else {
             format!(" {prev_word} ")
         };
-
         let candidates: Vec<_> = completions
             .trim_end_matches('\n')
             .split('\n')
+            .filter(|line| !line.is_empty())
             .map(|completion| format!("{cmd}{gap}{completion} "))
             .collect();
 
@@ -148,7 +156,7 @@ impl Completer for InputHelper {
         pos: usize,
         _ctx: &rustyline::Context<'_>,
     ) -> rustyline::Result<(usize, Vec<Self::Candidate>)> {
-        if let Ok(candidates) = self.register_completions(line.trim_end())
+        if let Ok(candidates) = self.register_completions(line, pos)
             && !candidates.is_empty()
         {
             return Ok((0, candidates));
