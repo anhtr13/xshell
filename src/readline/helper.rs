@@ -6,17 +6,15 @@ use std::{
 };
 
 use anyhow::Result;
-use rustyline::{
-    Helper, completion::Completer, highlight::Highlighter, hint::Hinter, validate::Validator,
-};
+use rustyline::{completion::Completer, highlight::Highlighter, hint::Hinter, validate::Validator};
 
-pub struct InputHelper {
+pub struct Helper {
     pub completers: HashMap<String, String>,
 }
 
-impl InputHelper {
+impl Helper {
     pub fn default() -> Self {
-        InputHelper {
+        Helper {
             completers: HashMap::new(),
         }
     }
@@ -135,7 +133,7 @@ impl InputHelper {
     }
 }
 
-impl Completer for InputHelper {
+impl Completer for Helper {
     type Candidate = String;
 
     fn complete(
@@ -144,12 +142,13 @@ impl Completer for InputHelper {
         pos: usize,
         _ctx: &rustyline::Context<'_>,
     ) -> rustyline::Result<(usize, Vec<Self::Candidate>)> {
-        let line = &line[..pos];
         if let Ok(completion) = self.register_completions(line, pos)
             && !completion.1.is_empty()
         {
             return Ok(completion);
         }
+
+        let line = &line[..pos];
         let mut completion = Self::command_completions(line).unwrap_or((pos, Vec::new()));
         if completion.1.is_empty() {
             completion = Self::directory_completions(line).unwrap_or((pos, Vec::new()));
@@ -170,15 +169,15 @@ impl Completer for InputHelper {
     // }
 }
 
-impl Hinter for InputHelper {
+impl Hinter for Helper {
     type Hint = String;
     fn hint(&self, _line: &str, _pos: usize, _ctx: &rustyline::Context<'_>) -> Option<Self::Hint> {
         None
     }
 }
 
-impl Validator for InputHelper {}
+impl Validator for Helper {}
 
-impl Highlighter for InputHelper {}
+impl Highlighter for Helper {}
 
-impl Helper for InputHelper {}
+impl rustyline::Helper for Helper {}

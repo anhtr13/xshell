@@ -17,18 +17,18 @@ use crate::{
     builtin::{self, Builtin},
     command::get_command_excutable,
     job::{Job, JobStatus, recent_jobs_ids},
-    readline::{helper::InputHelper, history::History},
+    readline::{helper::Helper, history::History},
     shell::parser::parse_commands_from_input,
 };
 
 pub struct Shell<'a> {
-    editor: &'a mut Editor<InputHelper, History>,
+    editor: &'a mut Editor<Helper, History>,
     jobs: Arc<RwLock<HashMap<u32, Job>>>,
     tx_done: Arc<Sender<u32>>, // channel for notifying done jobs
 }
 
 impl<'a> Shell<'a> {
-    pub fn new(editor: &'a mut Editor<InputHelper, History>) -> Self {
+    pub fn new(editor: &'a mut Editor<Helper, History>) -> Self {
         let jobs = Arc::new(RwLock::new(HashMap::<u32, Job>::new()));
         let jobs2 = jobs.clone();
         let (tx, rx) = mpsc::channel::<u32>();

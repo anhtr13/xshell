@@ -5,7 +5,7 @@ mod readline;
 mod shell;
 
 use crate::{
-    readline::{helper::InputHelper, history::History},
+    readline::{helper::Helper, history::History},
     shell::Shell,
 };
 use rustyline::{Config, Editor, config::Configurer};
@@ -23,9 +23,9 @@ fn main() -> anyhow::Result<()> {
         .completion_type(rustyline::CompletionType::List)
         .build();
 
-    let helper = InputHelper::default();
+    let helper = Helper::default();
 
-    let mut editor = Editor::<InputHelper, History>::with_history(config, history)?;
+    let mut editor = Editor::<Helper, History>::with_history(config, history)?;
     editor.set_helper(Some(helper));
     editor.set_auto_add_history(true);
 
