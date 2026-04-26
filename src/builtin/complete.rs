@@ -30,6 +30,10 @@ pub fn invoke(
                     ));
                 }
             }
+            "-r" => {
+                anyhow::ensure!(args.len() == 2);
+                completers.remove(&args[1]);
+            }
             _ => {}
         }
     }
