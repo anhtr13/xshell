@@ -2,8 +2,16 @@ use crate::command::ShellCommand;
 
 use std::fs::OpenOptions;
 
-pub fn parse_commands_from_input(input: String) -> anyhow::Result<Vec<ShellCommand>> {
-    let tokens = parse_token_from_input(input)?;
+enum ParseStateRedirecting {
+    Normal,
+    RedirectingStdout,
+    RedirectingStderr,
+    AppendingStdout,
+    AppendingStderr,
+}
+
+pub fn commands_from_input(input: String) -> anyhow::Result<Vec<ShellCommand>> {
+    let tokens = token_from_input(input)?;
     let mut cmds = Vec::new();
     let mut state = ParseStateRedirecting::Normal;
     let mut args = Vec::new();
@@ -114,15 +122,15 @@ pub fn parse_commands_from_input(input: String) -> anyhow::Result<Vec<ShellComma
     Ok(cmds)
 }
 
-enum ParseStateRedirecting {
+enum ParseStateToken {
     Normal,
-    RedirectingStdout,
-    RedirectingStderr,
-    AppendingStdout,
-    AppendingStderr,
+    NormalEscape,
+    SingleQuote,
+    DoubleQuote,
+    DoubleQuoteEscape,
 }
 
-fn parse_token_from_input(input: String) -> anyhow::Result<Vec<String>> {
+fn token_from_input(input: String) -> anyhow::Result<Vec<String>> {
     let mut args = Vec::new();
     let mut state = ParseStateToken::Normal;
     let mut token = String::new();
@@ -174,12 +182,4 @@ fn parse_token_from_input(input: String) -> anyhow::Result<Vec<String>> {
         ParseStateToken::Normal => Ok(args),
         _ => anyhow::bail!("parse error: failed to parse token"),
     }
-}
-
-enum ParseStateToken {
-    Normal,
-    NormalEscape,
-    SingleQuote,
-    DoubleQuote,
-    DoubleQuoteEscape,
 }

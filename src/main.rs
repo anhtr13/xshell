@@ -1,6 +1,7 @@
 mod builtin;
 mod command;
 mod job;
+mod parser;
 mod readline;
 mod shell;
 

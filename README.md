@@ -1,6 +1,6 @@
 # Xshell
 
-A Unix-like shell implementation in Rust, built for the [Build Your Own Shell](https://app.codecrafters.io/courses/shell/overview) challenge on [Codecrafters](https://app.codecrafters.io).
+An Unix-like shell implementation in Rust, built for the [Build Your Own Shell](https://app.codecrafters.io/courses/shell/overview) challenge on [Codecrafters](https://app.codecrafters.io).
 
 ## Build & Run
 

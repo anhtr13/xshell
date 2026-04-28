@@ -47,7 +47,6 @@ impl Helper {
         let completions = String::from_utf8(output.stdout)?;
 
         let mut candidates: Vec<_> = completions
-            .trim_end_matches('\n')
             .split('\n')
             .filter(|line| !line.is_empty())
             .map(|line| line.to_string())

@@ -4,8 +4,6 @@ use std::{
     os::unix::fs::PermissionsExt,
     path::Path,
     process::{Command, Stdio},
-    sync::{Arc, mpsc::Sender},
-    thread, time,
 };
 
 use crate::job::{Job, JobStatus};
@@ -36,7 +34,7 @@ impl ShellCommand {
         }
     }
 
-    pub fn run_as_external_command(
+    pub fn run_as_excutable(
         self,
         stdin: Option<PipeReader>,
         is_last: bool,
@@ -82,8 +80,7 @@ impl ShellCommand {
     pub fn run_as_background_job(
         self,
         stdin: Option<PipeReader>,
-        tx_done: Arc<Sender<u32>>,
-        job_number: u32,
+        number: u32,
     ) -> anyhow::Result<Job> {
         let stdin = if let Some(stdio) = stdin {
             Stdio::from(stdio)
@@ -103,31 +100,23 @@ impl ShellCommand {
             Stdio::inherit()
         };
 
-        let mut child = Command::new(&self.name)
+        let child = Command::new(&self.name)
             .args(&self.args)
             .stdin(stdin)
             .stdout(stdout)
             .stderr(stderr)
             .spawn()?;
 
-        let pid = child.id();
-
-        thread::spawn(move || {
-            child.wait().expect("command wasn't running");
-            tx_done.send(job_number).expect("tx_done cannot send");
-        });
-
         Ok(Job {
-            pid,
-            number: job_number,
+            child,
+            number,
             command: format!("{} {}", self.name, self.args.join(" ")),
             status: JobStatus::Running,
-            created_at: time::Instant::now(),
         })
     }
 }
 
-pub fn get_command_excutable(cmd_name: &str) -> Option<String> {
+pub fn find_excutable(cmd_name: &str) -> Option<String> {
     let path = std::env::var_os("PATH").expect("PATH not found");
     for dir in std::env::split_paths(&path) {
         let p = format!("{}/{}", dir.display(), cmd_name);
