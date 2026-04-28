@@ -32,7 +32,6 @@ impl<'a> Shell<'a> {
             let mut command_io = None;
 
             let mut has_job_builtin = false;
-
             self.jobs.update_status();
 
             for (idx, cmd) in commands.into_iter().enumerate() {

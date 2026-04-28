@@ -161,6 +161,7 @@ pub fn jobs(jobs: &[Job]) -> Result<String> {
         let space = match job.status {
             JobStatus::Running => "                 ",
             JobStatus::Done => "                    ",
+            JobStatus::Error => "                   ",
         };
         output.push(format!(
             "[{}]{}  {}{}{}",

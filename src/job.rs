@@ -4,6 +4,7 @@ use std::{collections::HashSet, fmt::Display, process::Child};
 pub enum JobStatus {
     Running,
     Done,
+    Error,
 }
 
 impl Display for JobStatus {
@@ -11,6 +12,7 @@ impl Display for JobStatus {
         match self {
             Self::Running => write!(f, "Running"),
             Self::Done => write!(f, "Done"),
+            Self::Error => write!(f, "Error"),
         }
     }
 }
@@ -77,7 +79,7 @@ impl Jobs {
                 }
                 Err(e) => {
                     eprintln!("error: {e}");
-                    job.status = JobStatus::Done;
+                    job.status = JobStatus::Error;
                 }
             }
         }
