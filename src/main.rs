@@ -6,11 +6,12 @@ mod readline;
 mod shell;
 
 use crate::{
+    job::Jobs,
     readline::{helper::Helper, history::History},
     shell::Shell,
 };
 use rustyline::{Config, Editor, config::Configurer};
-use std::env;
+use std::{collections::HashMap, env};
 
 fn main() -> anyhow::Result<()> {
     let mut history = History::default();
@@ -24,13 +25,16 @@ fn main() -> anyhow::Result<()> {
         .completion_type(rustyline::CompletionType::List)
         .build();
 
-    let helper = Helper::default();
+    let jobs = Jobs::new();
+    let completers = HashMap::new();
+    let variables = HashMap::new();
 
     let mut editor = Editor::<Helper, History>::with_history(config, history)?;
+    let helper = Helper::new(completers);
     editor.set_helper(Some(helper));
     editor.set_auto_add_history(true);
 
-    let mut shell = Shell::new(&mut editor);
+    let mut shell = Shell::new(&mut editor, jobs, variables);
     match shell.run() {
         Ok(_) => {}
         Err(e) => eprintln!("Error: {e}"),

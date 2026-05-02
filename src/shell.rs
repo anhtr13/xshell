@@ -1,4 +1,5 @@
 use std::{
+    collections::HashMap,
     io::{self, Write},
     str::FromStr,
 };
@@ -16,12 +17,20 @@ use crate::{
 pub struct Shell<'a> {
     editor: &'a mut Editor<Helper, History>,
     jobs: Jobs,
+    variables: HashMap<String, String>,
 }
 
 impl<'a> Shell<'a> {
-    pub fn new(editor: &'a mut Editor<Helper, History>) -> Self {
-        let jobs = Jobs::new();
-        Self { editor, jobs }
+    pub fn new(
+        editor: &'a mut Editor<Helper, History>,
+        jobs: Jobs,
+        variables: HashMap<String, String>,
+    ) -> Self {
+        Self {
+            editor,
+            jobs,
+            variables,
+        }
     }
 
     pub fn run(&mut self) -> anyhow::Result<()> {
@@ -43,6 +52,7 @@ impl<'a> Shell<'a> {
                         Builtin::History => builtin::history(cmd.args, self.editor.history_mut()),
                         Builtin::Pwd => builtin::pwd(),
                         Builtin::Type => builtin::r#type(cmd.args),
+                        Builtin::Declare => builtin::declare(cmd.args, &mut self.variables),
                         Builtin::Jobs => {
                             has_job_builtin = true;
                             builtin::jobs(self.jobs.value())

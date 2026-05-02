@@ -13,10 +13,8 @@ pub struct Helper {
 }
 
 impl Helper {
-    pub fn default() -> Self {
-        Helper {
-            completers: HashMap::new(),
-        }
+    pub fn new(completers: HashMap<String, String>) -> Self {
+        Helper { completers }
     }
 
     fn register_completions(&self, line: &str, pos: usize) -> Result<(usize, Vec<String>)> {
@@ -59,14 +57,16 @@ impl Helper {
         Ok((line.len() - word.len(), candidates))
     }
 
-    fn command_completions(line: &str) -> Result<(usize, Vec<String>)> {
-        anyhow::ensure!(!line.ends_with(' '));
+    fn command_completions(line: &str) -> (usize, Vec<String>) {
+        if line.ends_with(' ') {
+            return (0, Vec::new());
+        }
 
         let (lhs, pattern) = line.rsplit_once(' ').unwrap_or(("", line));
         let mut candidates = HashSet::new();
 
         let builtins = [
-            "echo", "exit", "cd", "pwd", "type", "history", "jobs", "complete",
+            "echo", "exit", "cd", "pwd", "type", "history", "jobs", "complete", "declare",
         ];
 
         for cmd in builtins.into_iter() {
@@ -100,10 +100,10 @@ impl Helper {
             candidates[0].push(' ');
         }
 
-        Ok((lhs.len(), candidates))
+        (lhs.len(), candidates)
     }
 
-    fn directory_completions(line: &str) -> Result<(usize, Vec<String>)> {
+    fn directory_completions(line: &str) -> (usize, Vec<String>) {
         let (lhs, path) = line.rsplit_once(' ').unwrap_or(("", line));
         let (dir, pattern) = path.rsplit_once('/').unwrap_or(("", path));
         let (offset, dir) = match (lhs.len(), dir.len()) {
@@ -128,7 +128,7 @@ impl Helper {
         if candidates.len() == 1 && !candidates[0].ends_with("/") {
             candidates[0].push(' ');
         }
-        Ok((offset, candidates))
+        (offset, candidates)
     }
 }
 
@@ -148,9 +148,9 @@ impl Completer for Helper {
         }
 
         let line = &line[..pos];
-        let mut completion = Self::command_completions(line).unwrap_or((pos, Vec::new()));
+        let mut completion = Self::command_completions(line);
         if completion.1.is_empty() {
-            completion = Self::directory_completions(line).unwrap_or((pos, Vec::new()));
+            completion = Self::directory_completions(line);
         }
         if completion.1.len() >= 2 {
             completion.1.sort_unstable();

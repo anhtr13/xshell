@@ -24,6 +24,7 @@ pub enum Builtin {
     Type,
     Jobs,
     Complete,
+    Declare,
 }
 
 impl Display for Builtin {
@@ -37,6 +38,7 @@ impl Display for Builtin {
             Self::Type => write!(f, "type"),
             Self::Jobs => write!(f, "jobs"),
             Self::Complete => write!(f, "complete"),
+            Self::Declare => write!(f, "declare"),
         }
     }
 }
@@ -53,6 +55,7 @@ impl FromStr for Builtin {
             "type" => Ok(Self::Type),
             "jobs" => Ok(Self::Jobs),
             "complete" => Ok(Self::Complete),
+            "declare" => Ok(Self::Declare),
             _ => anyhow::bail!("Not a builtin command"),
         }
     }
@@ -185,4 +188,21 @@ pub fn r#type(args: Vec<String>) -> Result<String> {
         anyhow::bail!("{}: not found", args[0])
     };
     Ok(ouput)
+}
+
+pub fn declare(args: Vec<String>, variables: &mut HashMap<String, String>) -> Result<String> {
+    if args[0] == "-p" {
+        anyhow::ensure!(args.len() == 2);
+        match variables.get(&args[1]) {
+            Some(val) => return Ok(format!("declare -- {}=\"{}\"", args[1], val)),
+            None => anyhow::bail!("declare: {}: not found", args[1]),
+        }
+    }
+    for pair in args {
+        let Some((key, val)) = pair.split_once('=') else {
+            anyhow::bail!("unknow: {}", pair)
+        };
+        variables.insert(key.to_owned(), val.to_owned());
+    }
+    Ok("".to_string())
 }
