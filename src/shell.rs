@@ -36,21 +36,26 @@ impl<'a> Shell<'a> {
     pub fn run(&mut self) -> anyhow::Result<()> {
         loop {
             let input = self.editor.readline("$ ")?;
-            let commands = parser::commands_from_input(input)?;
+            let commands = match parser::commands_from_input(input) {
+                Ok(commands) => commands,
+                Err(e) => {
+                    eprintln!("{e}");
+                    continue;
+                }
+            };
             let total_commands = commands.len();
             let mut command_io = None;
-
             let mut has_job_builtin = false;
             self.jobs.update_status();
 
             for (idx, mut cmd) in commands.into_iter().enumerate() {
-                match args_expansion(cmd.args, &self.variables) {
-                    Ok(args) => cmd.args = args,
+                cmd.args = match args_expansion(cmd.args, &self.variables) {
+                    Ok(args) => args,
                     Err(e) => {
                         eprintln!("{e}");
                         break;
                     }
-                }
+                };
                 let is_last = idx + 1 == total_commands;
                 if let Ok(builtin) = Builtin::from_str(&cmd.name) {
                     let output = match builtin {

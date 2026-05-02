@@ -30,12 +30,12 @@ pub fn commands_from_input(input: String) -> anyhow::Result<Vec<ShellCommand>> {
                 "2>>" => state = RedirectingState::AppendingStderr,
                 "|" => {
                     if name.is_empty() {
-                        anyhow::bail!("parse error near `|`")
+                        anyhow::bail!("parse error: unexpected token near `|`")
                     }
                     if let Some(last_arg) = args.last()
                         && last_arg == "&"
                     {
-                        anyhow::bail!("parse error near `|`")
+                        anyhow::bail!("parse error: unexpected token near `|`")
                     }
                     cmds.push(ShellCommand::new(
                         name,
@@ -59,7 +59,7 @@ pub fn commands_from_input(input: String) -> anyhow::Result<Vec<ShellCommand>> {
             },
             RedirectingState::RedirectingStdout => match arg.as_str() {
                 ">" | "1>" | "2>" | ">>" | "1>>" | "2>>" | "|" => {
-                    anyhow::bail!("parse error near `>`")
+                    anyhow::bail!("parse error: unexpected token near `>`")
                 }
                 _ => {
                     let f = OpenOptions::new()
@@ -73,7 +73,7 @@ pub fn commands_from_input(input: String) -> anyhow::Result<Vec<ShellCommand>> {
             },
             RedirectingState::RedirectingStderr => match arg.as_str() {
                 ">" | "1>" | "2>" | ">>" | "1>>" | "2>>" | "|" => {
-                    anyhow::bail!("parse error near `>`")
+                    anyhow::bail!("parse error: unexpected token near `>`")
                 }
                 _ => {
                     let f = OpenOptions::new()
@@ -87,7 +87,7 @@ pub fn commands_from_input(input: String) -> anyhow::Result<Vec<ShellCommand>> {
             },
             RedirectingState::AppendingStdout => match arg.as_str() {
                 ">" | "1>" | "2>" | ">>" | "1>>" | "2>>" | "|" => {
-                    anyhow::bail!("parse error near `>`")
+                    anyhow::bail!("parse error: unexpected token near `>`")
                 }
                 _ => {
                     let f = OpenOptions::new().create(true).append(true).open(&arg)?;
@@ -97,7 +97,7 @@ pub fn commands_from_input(input: String) -> anyhow::Result<Vec<ShellCommand>> {
             },
             RedirectingState::AppendingStderr => match arg.as_str() {
                 ">" | "1>" | "2>" | ">>" | "1>>" | "2>>" | "|" => {
-                    anyhow::bail!("parse error near `>`")
+                    anyhow::bail!("parse error: unexpected token near `>`")
                 }
                 _ => {
                     let f = OpenOptions::new().create(true).append(true).open(&arg)?;
@@ -182,7 +182,10 @@ fn token_from_input(input: String) -> anyhow::Result<Vec<String>> {
     }
     match state {
         TokenState::Normal => Ok(args),
-        _ => anyhow::bail!("parse error: failed to parse token"),
+        TokenState::SingleQuote => anyhow::bail!("parse error: unexpected token near `'`"),
+        TokenState::DoubleQuote => anyhow::bail!("parse error: unexpected token near `\"`"),
+        TokenState::NormalEscape => anyhow::bail!("parse error: unexpected token near `\\`"),
+        TokenState::DoubleQuoteEscape => anyhow::bail!("parse error: unexpected token near `\\`"),
     }
 }
 
@@ -213,13 +216,13 @@ pub fn args_expansion(
                         var = String::new();
                     }
                     VariableState::VariableBrace => {
-                        anyhow::bail!("parse error: unexpected token near '$'")
+                        anyhow::bail!("parse error: unexpected token near `$`")
                     }
                 }
             } else if c == '{' {
                 match state {
                     VariableState::Variable => state = VariableState::VariableBrace,
-                    _ => anyhow::bail!("parse error: unexpected token near '{{'"),
+                    _ => anyhow::bail!("parse error: unexpected token near `{{`"),
                 }
             } else if c == '}' {
                 match state {
@@ -230,7 +233,7 @@ pub fn args_expansion(
                         var = String::new();
                         state = VariableState::Normal;
                     }
-                    _ => anyhow::bail!("parse error: unexpected token near '}}'"),
+                    _ => anyhow::bail!("parse error: unexpected token near `}}`"),
                 }
             } else {
                 match state {
@@ -241,7 +244,7 @@ pub fn args_expansion(
         }
         anyhow::ensure!(
             state != VariableState::VariableBrace,
-            "parse error: unexpected token near '{{'"
+            "parse error: unexpected token near `{{`"
         );
         if !var.is_empty()
             && let Some(val) = variables.get(&var)
