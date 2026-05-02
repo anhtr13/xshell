@@ -248,7 +248,9 @@ pub fn args_expansion(
         {
             final_word.push_str(val);
         }
-        res.push(final_word);
+        if !final_word.is_empty() {
+            res.push(final_word);
+        }
     }
     Ok(res)
 }
