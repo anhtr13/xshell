@@ -198,11 +198,17 @@ pub fn declare(args: Vec<String>, variables: &mut HashMap<String, String>) -> Re
             None => anyhow::bail!("declare: {}: not found", args[1]),
         }
     }
+    let rgx = regex::Regex::new(r"^[A-Za-z_][A-Za-z0-9_]*$")?;
     for pair in args {
-        let Some((key, val)) = pair.split_once('=') else {
-            anyhow::bail!("unknow: {}", pair)
+        if let Some((key, val)) = pair.split_once('=')
+            && !key.is_empty()
+            && !val.is_empty()
+            && rgx.is_match(key)
+        {
+            variables.insert(key.to_owned(), val.to_owned());
+        } else {
+            anyhow::bail!("declare: `{}': not a valid identifier", pair)
         };
-        variables.insert(key.to_owned(), val.to_owned());
     }
     Ok("".to_string())
 }

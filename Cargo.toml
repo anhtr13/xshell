@@ -7,4 +7,5 @@ rust-version = "1.92"
 
 [dependencies]
 anyhow = "1.0.102"
+regex = "1.12.3"
 rustyline = "17.0.2"
