@@ -43,7 +43,8 @@ impl<'a> Shell<'a> {
             let mut has_job_builtin = false;
             self.jobs.update_status();
 
-            for (idx, cmd) in commands.into_iter().enumerate() {
+            for (idx, mut cmd) in commands.into_iter().enumerate() {
+                cmd.args = self.expand_args(cmd.args);
                 let is_last = idx + 1 == total_commands;
                 if let Ok(builtin) = Builtin::from_str(&cmd.name) {
                     let output = match builtin {
@@ -109,5 +110,23 @@ impl<'a> Shell<'a> {
             }
             self.jobs.clean_up();
         }
+    }
+
+    fn expand_args(&self, args: Vec<String>) -> Vec<String> {
+        let mut res = Vec::new();
+        for arg in args {
+            let vars: Vec<_> = arg.split('$').collect();
+            let mut arg = vars[0].to_string();
+            for v in vars.into_iter().skip(1) {
+                if let Some(val) = self.variables.get(v) {
+                    arg.push_str(val);
+                } else {
+                    arg.push('$');
+                    arg.push_str(v);
+                }
+            }
+            res.push(arg);
+        }
+        res
     }
 }
