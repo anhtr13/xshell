@@ -10,7 +10,7 @@ use crate::{
     builtin::{self, Builtin},
     command::find_excutable,
     job::Jobs,
-    parser,
+    parser::{self, args_expansion},
     readline::{helper::Helper, history::History},
 };
 
@@ -44,7 +44,13 @@ impl<'a> Shell<'a> {
             self.jobs.update_status();
 
             for (idx, mut cmd) in commands.into_iter().enumerate() {
-                cmd.args = self.expand_args(cmd.args);
+                match args_expansion(cmd.args, &self.variables) {
+                    Ok(args) => cmd.args = args,
+                    Err(e) => {
+                        eprintln!("{e}");
+                        break;
+                    }
+                }
                 let is_last = idx + 1 == total_commands;
                 if let Ok(builtin) = Builtin::from_str(&cmd.name) {
                     let output = match builtin {
@@ -110,23 +116,5 @@ impl<'a> Shell<'a> {
             }
             self.jobs.clean_up();
         }
-    }
-
-    fn expand_args(&self, args: Vec<String>) -> Vec<String> {
-        let mut res = Vec::new();
-        for arg in args {
-            let vars: Vec<_> = arg.split('$').collect();
-            let mut arg = vars[0].to_string();
-            for v in vars.into_iter().skip(1) {
-                if let Some(val) = self.variables.get(v) {
-                    arg.push_str(val);
-                } else {
-                    arg.push('$');
-                    arg.push_str(v);
-                }
-            }
-            res.push(arg);
-        }
-        res
     }
 }

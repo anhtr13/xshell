@@ -1,8 +1,10 @@
+use anyhow::Result;
+
 use crate::command::ShellCommand;
 
-use std::fs::OpenOptions;
+use std::{collections::HashMap, fs::OpenOptions};
 
-enum ParseStateRedirecting {
+enum RedirectingState {
     Normal,
     RedirectingStdout,
     RedirectingStderr,
@@ -13,7 +15,7 @@ enum ParseStateRedirecting {
 pub fn commands_from_input(input: String) -> anyhow::Result<Vec<ShellCommand>> {
     let tokens = token_from_input(input)?;
     let mut cmds = Vec::new();
-    let mut state = ParseStateRedirecting::Normal;
+    let mut state = RedirectingState::Normal;
     let mut args = Vec::new();
     let mut name = String::from("");
     let mut stdout_file = None;
@@ -21,11 +23,11 @@ pub fn commands_from_input(input: String) -> anyhow::Result<Vec<ShellCommand>> {
 
     for arg in tokens {
         match state {
-            ParseStateRedirecting::Normal => match arg.as_str() {
-                ">" | "1>" => state = ParseStateRedirecting::RedirectingStdout,
-                "2>" => state = ParseStateRedirecting::RedirectingStderr,
-                ">>" | "1>>" => state = ParseStateRedirecting::AppendingStdout,
-                "2>>" => state = ParseStateRedirecting::AppendingStderr,
+            RedirectingState::Normal => match arg.as_str() {
+                ">" | "1>" => state = RedirectingState::RedirectingStdout,
+                "2>" => state = RedirectingState::RedirectingStderr,
+                ">>" | "1>>" => state = RedirectingState::AppendingStdout,
+                "2>>" => state = RedirectingState::AppendingStderr,
                 "|" => {
                     if name.is_empty() {
                         anyhow::bail!("parse error near `|`")
@@ -55,7 +57,7 @@ pub fn commands_from_input(input: String) -> anyhow::Result<Vec<ShellCommand>> {
                     }
                 }
             },
-            ParseStateRedirecting::RedirectingStdout => match arg.as_str() {
+            RedirectingState::RedirectingStdout => match arg.as_str() {
                 ">" | "1>" | "2>" | ">>" | "1>>" | "2>>" | "|" => {
                     anyhow::bail!("parse error near `>`")
                 }
@@ -66,10 +68,10 @@ pub fn commands_from_input(input: String) -> anyhow::Result<Vec<ShellCommand>> {
                         .truncate(true)
                         .open(&arg)?;
                     stdout_file = Some(f);
-                    state = ParseStateRedirecting::Normal;
+                    state = RedirectingState::Normal;
                 }
             },
-            ParseStateRedirecting::RedirectingStderr => match arg.as_str() {
+            RedirectingState::RedirectingStderr => match arg.as_str() {
                 ">" | "1>" | "2>" | ">>" | "1>>" | "2>>" | "|" => {
                     anyhow::bail!("parse error near `>`")
                 }
@@ -80,27 +82,27 @@ pub fn commands_from_input(input: String) -> anyhow::Result<Vec<ShellCommand>> {
                         .truncate(true)
                         .open(&arg)?;
                     stderr_file = Some(f);
-                    state = ParseStateRedirecting::Normal;
+                    state = RedirectingState::Normal;
                 }
             },
-            ParseStateRedirecting::AppendingStdout => match arg.as_str() {
+            RedirectingState::AppendingStdout => match arg.as_str() {
                 ">" | "1>" | "2>" | ">>" | "1>>" | "2>>" | "|" => {
                     anyhow::bail!("parse error near `>`")
                 }
                 _ => {
                     let f = OpenOptions::new().create(true).append(true).open(&arg)?;
                     stdout_file = Some(f);
-                    state = ParseStateRedirecting::Normal;
+                    state = RedirectingState::Normal;
                 }
             },
-            ParseStateRedirecting::AppendingStderr => match arg.as_str() {
+            RedirectingState::AppendingStderr => match arg.as_str() {
                 ">" | "1>" | "2>" | ">>" | "1>>" | "2>>" | "|" => {
                     anyhow::bail!("parse error near `>`")
                 }
                 _ => {
                     let f = OpenOptions::new().create(true).append(true).open(&arg)?;
                     stderr_file = Some(f);
-                    state = ParseStateRedirecting::Normal;
+                    state = RedirectingState::Normal;
                 }
             },
         }
@@ -122,7 +124,7 @@ pub fn commands_from_input(input: String) -> anyhow::Result<Vec<ShellCommand>> {
     Ok(cmds)
 }
 
-enum ParseStateToken {
+enum TokenState {
     Normal,
     NormalEscape,
     SingleQuote,
@@ -132,36 +134,36 @@ enum ParseStateToken {
 
 fn token_from_input(input: String) -> anyhow::Result<Vec<String>> {
     let mut args = Vec::new();
-    let mut state = ParseStateToken::Normal;
+    let mut state = TokenState::Normal;
     let mut token = String::new();
     for c in input.trim().chars() {
         match state {
-            ParseStateToken::Normal => match c {
+            TokenState::Normal => match c {
                 ' ' => {
                     if !token.is_empty() {
                         args.push(token);
                         token = String::new();
                     }
                 }
-                '\\' => state = ParseStateToken::NormalEscape,
-                '\'' => state = ParseStateToken::SingleQuote,
-                '\"' => state = ParseStateToken::DoubleQuote,
+                '\\' => state = TokenState::NormalEscape,
+                '\'' => state = TokenState::SingleQuote,
+                '\"' => state = TokenState::DoubleQuote,
                 _ => token.push(c),
             },
-            ParseStateToken::NormalEscape => {
+            TokenState::NormalEscape => {
                 token.push(c);
-                state = ParseStateToken::Normal;
+                state = TokenState::Normal;
             }
-            ParseStateToken::SingleQuote => match c {
-                '\'' => state = ParseStateToken::Normal,
+            TokenState::SingleQuote => match c {
+                '\'' => state = TokenState::Normal,
                 _ => token.push(c),
             },
-            ParseStateToken::DoubleQuote => match c {
-                '\"' => state = ParseStateToken::Normal,
-                '\\' => state = ParseStateToken::DoubleQuoteEscape,
+            TokenState::DoubleQuote => match c {
+                '\"' => state = TokenState::Normal,
+                '\\' => state = TokenState::DoubleQuoteEscape,
                 _ => token.push(c),
             },
-            ParseStateToken::DoubleQuoteEscape => {
+            TokenState::DoubleQuoteEscape => {
                 match c {
                     '\\' => token.push('\\'),
                     '\'' => token.push('\''),
@@ -171,7 +173,7 @@ fn token_from_input(input: String) -> anyhow::Result<Vec<String>> {
                     '0' => token.push('\0'),
                     _ => token.push(c),
                 };
-                state = ParseStateToken::DoubleQuote;
+                state = TokenState::DoubleQuote;
             }
         }
     }
@@ -179,7 +181,74 @@ fn token_from_input(input: String) -> anyhow::Result<Vec<String>> {
         args.push(token);
     }
     match state {
-        ParseStateToken::Normal => Ok(args),
+        TokenState::Normal => Ok(args),
         _ => anyhow::bail!("parse error: failed to parse token"),
     }
+}
+
+#[derive(PartialEq)]
+enum VariableState {
+    Normal,
+    Variable,
+    VariableBrace,
+}
+
+pub fn args_expansion(
+    args: Vec<String>,
+    variables: &HashMap<String, String>,
+) -> Result<Vec<String>> {
+    let mut res = Vec::new();
+    for arg in args {
+        let mut state = VariableState::Normal;
+        let mut var = String::new();
+        let mut final_word = String::new();
+        for c in arg.chars() {
+            if c == '$' {
+                match state {
+                    VariableState::Normal => state = VariableState::Variable,
+                    VariableState::Variable => {
+                        if let Some(val) = variables.get(&var) {
+                            final_word.push_str(val);
+                        }
+                        var = String::new();
+                    }
+                    VariableState::VariableBrace => {
+                        anyhow::bail!("parse error: unexpected token near '$'")
+                    }
+                }
+            } else if c == '{' {
+                match state {
+                    VariableState::Variable => state = VariableState::VariableBrace,
+                    _ => anyhow::bail!("parse error: unexpected token near '{{'"),
+                }
+            } else if c == '}' {
+                match state {
+                    VariableState::VariableBrace => {
+                        if let Some(val) = variables.get(&var) {
+                            final_word.push_str(val);
+                        }
+                        var = String::new();
+                        state = VariableState::Normal;
+                    }
+                    _ => anyhow::bail!("parse error: unexpected token near '}}'"),
+                }
+            } else {
+                match state {
+                    VariableState::Normal => final_word.push(c),
+                    _ => var.push(c),
+                }
+            }
+        }
+        anyhow::ensure!(
+            state != VariableState::VariableBrace,
+            "parse error: unexpected token near '{{'"
+        );
+        if !var.is_empty()
+            && let Some(val) = variables.get(&var)
+        {
+            final_word.push_str(val);
+        }
+        res.push(final_word);
+    }
+    Ok(res)
 }
